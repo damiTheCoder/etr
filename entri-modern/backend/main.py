@@ -14,6 +14,8 @@ import os
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any, Optional
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
