@@ -370,7 +370,7 @@ export default function Dashboard() {
       {/* 2-col KPI grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. CASH BALANCE */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Cash Balance</CardTitle>
@@ -391,7 +391,7 @@ export default function Dashboard() {
         </Card>
 
         {/* 2. REVENUE */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Revenue</CardTitle>
@@ -412,7 +412,7 @@ export default function Dashboard() {
         </Card>
 
         {/* 3. EXPENSES */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Expenses</CardTitle>
@@ -433,7 +433,7 @@ export default function Dashboard() {
         </Card>
 
         {/* 4. NET PROFIT */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Net Profit</CardTitle>
@@ -457,7 +457,7 @@ export default function Dashboard() {
         </Card>
 
         {/* 5. ACCOUNTS RECEIVABLE */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Accounts Receivable</CardTitle>
@@ -479,7 +479,7 @@ export default function Dashboard() {
         </Card>
 
         {/* 6. ACCOUNTS PAYABLE */}
-        <Card className="flex flex-col justify-between border-0 shadow-xs bg-white rounded-2xl">
+        <Card className="flex flex-col justify-between border-0 shadow-xs bg-slate-50 rounded-2xl">
           <CardHeader className="px-6 pt-6 pb-2 space-y-1">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold text-slate-800">Accounts Payable</CardTitle>

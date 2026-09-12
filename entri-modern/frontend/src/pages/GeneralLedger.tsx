@@ -124,8 +124,8 @@ export default function GeneralLedger() {
       </Card>
 
       {/* Main White Card Container */}
-      <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-b border-slate-200 px-6 py-4 bg-white">
+      <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
+        <CardHeader className="border-0 px-6 py-4 bg-transparent">
           <CardTitle className="text-slate-900 font-bold">General Ledger Statement</CardTitle>
           <CardDescription className="text-slate-500 font-medium">
             {filterAccount !== 'all' ? `Filtered by ${filterAccount}` : 'All accounts'} • {entries.length} transactions recorded

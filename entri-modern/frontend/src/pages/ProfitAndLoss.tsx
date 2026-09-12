@@ -96,8 +96,8 @@ export default function ProfitAndLoss() {
       </div>
 
       {data ? (
-        <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden p-0">
-          <CardHeader className="border-b border-slate-200 px-6 py-4 bg-white">
+        <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
+          <CardHeader className="border-0 px-6 py-4 bg-transparent">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">Statement of Profit & Loss (Income Statement)</CardTitle>
@@ -197,7 +197,7 @@ export default function ProfitAndLoss() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-slate-100 border border-slate-300/60">
+        <Card className="bg-slate-100 border-0">
           <CardContent className="py-16 text-center text-slate-500">Loading Profit & Loss Statement...</CardContent>
         </Card>
       )}

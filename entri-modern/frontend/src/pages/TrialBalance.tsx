@@ -91,8 +91,8 @@ export default function TrialBalance() {
         </div>
       </div>
 
-      <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-b border-slate-200 px-6 py-4 bg-white">
+      <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
+        <CardHeader className="border-0 px-6 py-4 bg-transparent">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-slate-900 font-bold">Trial Balance Summary</CardTitle>
@@ -156,7 +156,7 @@ export default function TrialBalance() {
           </div>
 
           {data && (
-            <div className="p-4 border-t border-slate-200 bg-white flex items-center justify-between">
+            <div className="p-4 border-0 bg-transparent flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {data.balanced ? (
                   <CheckCircle className="w-5 h-5 text-emerald-600" />
