@@ -5,6 +5,8 @@ Connects securely to OpenRouter API (Next N2 Pro model) server-side.
 """
 import os
 import json
+import asyncio
+import time
 import httpx
 from datetime import date as date_cls
 from typing import Any, Dict, List, Optional
@@ -854,7 +856,17 @@ async def ai_chat_endpoint(req: ChatRequest):
                 json=body,
                 headers=headers
             )
-            
+
+            if response.status_code == 429:
+                retry_after = float(response.headers.get("Retry-After", 2))
+                if step < 2:
+                    await asyncio.sleep(min(retry_after, 10))
+                    continue
+                raise HTTPException(
+                    status_code=429,
+                    detail="The AI service is busy right now. Please try again in a moment."
+                )
+
             if response.status_code != 200:
                 raise HTTPException(
                     status_code=response.status_code,

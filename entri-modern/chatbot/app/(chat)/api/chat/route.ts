@@ -433,6 +433,14 @@ export async function POST(request: Request) {
       onError: (error) => {
         if (
           error instanceof Error &&
+          (error.message?.includes("429") ||
+            error.message?.toLowerCase().includes("rate limit") ||
+            error.message?.toLowerCase().includes("rate_limit"))
+        ) {
+          return "The AI service is busy right now. Please try again in a moment.";
+        }
+        if (
+          error instanceof Error &&
           error.message?.includes(
             "AI Gateway requires a valid credit card on file to service requests"
           )
@@ -470,6 +478,15 @@ export async function POST(request: Request) {
 
     if (error instanceof ChatbotError) {
       return error.toResponse();
+    }
+
+    if (
+      error instanceof Error &&
+      (error.message?.includes("429") ||
+        error.message?.toLowerCase().includes("rate limit") ||
+        error.message?.toLowerCase().includes("rate_limit"))
+    ) {
+      return new ChatbotError("rate_limit:chat").toResponse();
     }
 
     if (
