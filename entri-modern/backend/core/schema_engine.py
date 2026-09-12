@@ -1,5 +1,5 @@
 """
-Schema-driven ORM engine - mirrors Frappe Books' fyo framework architecture.
+Schema-driven ORM engine - mirrors Entri's fyo framework architecture.
 Schemas define data shape, models provide business logic.
 """
 import json

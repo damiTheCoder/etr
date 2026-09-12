@@ -2,7 +2,7 @@
 FastAPI server - the main entry point.
 Provides REST API for all accounting operations.
 
-Mirrors the full accounting competence of Frappe Books:
+Mirrors the full accounting competence of Entri:
   - Complete IFRS/GAAP Chart of Accounts
   - Double-entry ledger with debit/credit classification
   - Sales/Purchase invoices with tax handling

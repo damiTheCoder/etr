@@ -1,7 +1,7 @@
 {
-  "name": "frappe-books-modern",
+  "name": "entri-modern",
   "version": "0.1.0",
-  "description": "Modern rebuild of Frappe Books - Double-entry accounting",
+  "description": "Modern rebuild of Entri - Double-entry accounting",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
@@ -32,8 +32,8 @@
     "@types/luxon": "^3.4.0"
   },
   "build": {
-    "appId": "io.frappe.books.modern",
-    "productName": "Frappe Books Modern",
+    "appId": "io.entri.modern",
+    "productName": "Entri Modern",
     "directories": {
       "output": "dist-electron"
     },
