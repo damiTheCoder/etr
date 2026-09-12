@@ -1,0 +1,8 @@
+{
+  "name": "UOM",
+  "label": "Unit of Measure",
+  "fields": [
+    { "fieldname": "name", "label": "UOM Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "description", "label": "Description", "fieldtype": "Data" }
+  ]
+}

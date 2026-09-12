@@ -1,0 +1,14 @@
+{
+  "name": "Address",
+  "label": "Address",
+  "fields": [
+    { "fieldname": "name", "label": "Address Title", "fieldtype": "Data", "required": true },
+    { "fieldname": "addressLine1", "label": "Address Line 1", "fieldtype": "Data" },
+    { "fieldname": "addressLine2", "label": "Address Line 2", "fieldtype": "Data" },
+    { "fieldname": "city", "label": "City", "fieldtype": "Data" },
+    { "fieldname": "state", "label": "State/Province", "fieldtype": "Data" },
+    { "fieldname": "country", "label": "Country", "fieldtype": "Data" },
+    { "fieldname": "postalCode", "label": "Postal Code", "fieldtype": "Data" },
+    { "fieldname": "party", "label": "Party", "fieldtype": "Link", "target": "Party" }
+  ]
+}

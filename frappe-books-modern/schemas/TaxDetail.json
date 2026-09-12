@@ -1,0 +1,10 @@
+{
+  "name": "TaxDetail",
+  "label": "Tax Detail",
+  "is_child": true,
+  "fields": [
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account", "required": true },
+    { "fieldname": "rate", "label": "Rate (%)", "fieldtype": "Float", "default": 0 },
+    { "fieldname": "taxAmount", "label": "Tax Amount", "fieldtype": "Currency", "default": 0 }
+  ]
+}

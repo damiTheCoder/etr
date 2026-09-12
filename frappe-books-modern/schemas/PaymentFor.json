@@ -1,0 +1,10 @@
+{
+  "name": "PaymentFor",
+  "label": "Payment Reference",
+  "is_child": true,
+  "fields": [
+    { "fieldname": "referenceType", "label": "Reference Type", "fieldtype": "Link", "target": "Invoice" },
+    { "fieldname": "referenceName", "label": "Reference Name", "fieldtype": "Data" },
+    { "fieldname": "amount", "label": "Allocated Amount", "fieldtype": "Currency", "default": 0 }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "NumberSeries",
+  "label": "Number Series",
+  "fields": [
+    { "fieldname": "name", "label": "Prefix", "fieldtype": "Data", "required": true },
+    { "fieldname": "prefix", "label": "Prefix", "fieldtype": "Data", "required": true },
+    { "fieldname": "current", "label": "Current Number", "fieldtype": "Int", "default": 0 }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Invoice",
+  "label": "Invoice",
+  "is_abstract": true,
+  "is_submittable": true,
+  "naming": "numberSeries",
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "INV-" },
+    { "fieldname": "party", "label": "Party", "fieldtype": "Link", "target": "Party", "required": true },
+    { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
+    { "fieldname": "dueDate", "label": "Due Date", "fieldtype": "Date" },
+    { "fieldname": "currency", "label": "Currency", "fieldtype": "Data", "default": "USD" },
+    { "fieldname": "exchangeRate", "label": "Exchange Rate", "fieldtype": "Float", "default": 1 },
+    { "fieldname": "priceList", "label": "Price List", "fieldtype": "Link", "target": "PriceList" },
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "netTotal", "label": "Net Total", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "taxTotal", "label": "Tax Total", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "grandTotal", "label": "Grand Total", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "baseGrandTotal", "label": "Base Grand Total", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "outstandingAmount", "label": "Outstanding", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "discountAmount", "label": "Discount Amount", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "discountPercent", "label": "Discount Percent", "fieldtype": "Float", "default": 0 },
+    { "fieldname": "taxes", "label": "Taxes", "fieldtype": "Table", "target": "TaxSummary" },
+    { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
+    { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false },
+    { "fieldname": "returnAgainst", "label": "Return Against", "fieldtype": "Link", "target": "Invoice" },
+    { "fieldname": "isReturn", "label": "Is Return", "fieldtype": "Check", "default": false },
+    { "fieldname": "entryType", "label": "Entry Type", "fieldtype": "Select", "options": [
+      {"value": "Sales", "label": "Sales"}, {"value": "Purchase", "label": "Purchase"},
+      {"value": "Credit Note", "label": "Credit Note"}, {"value": "Debit Note", "label": "Debit Note"}
+    ]},
+    { "fieldname": "userRemark", "label": "User Remark", "fieldtype": "Text" }
+    , { "fieldname": "approvalStatus", "label": "Approval Status", "fieldtype": "Select", "options": [
+        {"value": "Pending", "label": "Pending"},
+        {"value": "Approved", "label": "Approved"},
+        {"value": "Rejected", "label": "Rejected"}
+      ], "default": "Pending" }  ]
+}

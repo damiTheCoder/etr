@@ -1,0 +1,13 @@
+{
+  "name": "PaymentMethod",
+  "label": "Payment Method",
+  "fields": [
+    { "fieldname": "name", "label": "Payment Method", "fieldtype": "Data", "required": true },
+    { "fieldname": "type", "label": "Type", "fieldtype": "Select", "options": [
+      {"value": "Cash", "label": "Cash"},
+      {"value": "Cheque", "label": "Cheque"},
+      {"value": "Transfer", "label": "Bank Transfer"}
+    ]},
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account" }
+  ]
+}

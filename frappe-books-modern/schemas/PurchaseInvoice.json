@@ -1,0 +1,12 @@
+{
+  "name": "PurchaseInvoice",
+  "label": "Purchase Invoice",
+  "extends": "Invoice",
+  "naming": "numberSeries",
+  "is_submittable": true,
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "PINV-", "required": true },
+    { "fieldname": "items", "label": "Items", "fieldtype": "Table", "target": "PurchaseInvoiceItem", "required": true }
+  ],
+  "keywordFields": ["name", "party"]
+}

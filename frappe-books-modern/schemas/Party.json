@@ -1,0 +1,19 @@
+{
+  "name": "Party",
+  "label": "Party",
+  "naming": "numberSeries",
+  "fields": [
+    { "fieldname": "name", "label": "Party Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "partyType", "label": "Type", "fieldtype": "Select", "required": true, "options": [
+      {"value": "Customer", "label": "Customer"}, {"value": "Supplier", "label": "Supplier"}, {"value": "Both", "label": "Both"}
+    ]},
+    { "fieldname": "email", "label": "Email", "fieldtype": "Data" },
+    { "fieldname": "phone", "label": "Phone", "fieldtype": "Data" },
+    { "fieldname": "address", "label": "Address", "fieldtype": "Text" },
+    { "fieldname": "taxId", "label": "Tax ID", "fieldtype": "Data" },
+    { "fieldname": "openingBalance", "label": "Opening Balance", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "creditLimit", "label": "Credit Limit", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "defaultPriceList", "label": "Default Price List", "fieldtype": "Link", "target": "PriceList" }
+  ],
+  "keywordFields": ["name", "email", "phone"]
+}

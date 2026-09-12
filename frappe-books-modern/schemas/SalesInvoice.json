@@ -1,0 +1,12 @@
+{
+  "name": "SalesInvoice",
+  "label": "Sales Invoice",
+  "extends": "Invoice",
+  "naming": "numberSeries",
+  "is_submittable": true,
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "SINV-", "required": true },
+    { "fieldname": "items", "label": "Items", "fieldtype": "Table", "target": "SalesInvoiceItem", "required": true }
+  ],
+  "keywordFields": ["name", "party"]
+}

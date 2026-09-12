@@ -1,0 +1,23 @@
+{
+  "name": "Reconciliation",
+  "label": "Reconciliation",
+  "is_submittable": true,
+  "naming": "numberSeries",
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "RECON-", "required": true },
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account", "required": true },
+    { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
+    { "fieldname": "status", "label": "Status", "fieldtype": "Select", "options": [
+      {"value": "Draft", "label": "Draft"},
+      {"value": "Completed", "label": "Completed"},
+      {"value": "Cancelled", "label": "Cancelled"}
+    ], "default": "Draft" },
+    { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
+    { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false },
+    { "fieldname": "openingBalance", "label": "Opening Balance", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "closingBalance", "label": "Closing Balance", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "entries", "label": "Entries", "fieldtype": "Table", "target": "ReconciliationEntry" },
+    { "fieldname": "userRemark", "label": "User Remark", "fieldtype": "Text" }
+  ],
+  "keywordFields": ["name", "account"]
+}

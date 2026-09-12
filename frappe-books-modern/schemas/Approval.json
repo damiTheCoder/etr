@@ -1,0 +1,26 @@
+{
+  "name": "Approval",
+  "label": "Approval",
+  "is_submittable": true,
+  "naming": "numberSeries",
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "APPR-", "required": true },
+    { "fieldname": "referenceType", "label": "Reference Type", "fieldtype": "Select", "options": [
+      {"value": "SalesInvoice", "label": "Sales Invoice"},
+      {"value": "PurchaseInvoice", "label": "Purchase Invoice"},
+      {"value": "Payment", "label": "Payment"},
+      {"value": "JournalEntry", "label": "Journal Entry"},
+      {"value": "PurchaseOrder", "label": "Purchase Order"}
+    ], "required": true },
+    { "fieldname": "referenceName", "label": "Reference Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "status", "label": "Status", "fieldtype": "Select", "options": [
+      {"value": "Pending", "label": "Pending"},
+      {"value": "Approved", "label": "Approved"},
+      {"value": "Rejected", "label": "Rejected"}
+    ], "default": "Pending" },
+    { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
+    { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false },
+    { "fieldname": "remark", "label": "Remark", "fieldtype": "Text" }
+  ],
+  "keywordFields": ["name", "referenceName"]
+}

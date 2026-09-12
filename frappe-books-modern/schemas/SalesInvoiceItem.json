@@ -1,0 +1,7 @@
+{
+  "name": "SalesInvoiceItem",
+  "label": "Sales Invoice Item",
+  "extends": "InvoiceItem",
+  "is_child": true,
+  "fields": []
+}

@@ -1,0 +1,13 @@
+{
+  "name": "AccountingSettings",
+  "label": "Accounting Settings",
+  "is_single": true,
+  "fields": [
+    { "fieldname": "companyName", "label": "Company Name", "fieldtype": "Data", "default": "My Company" },
+    { "fieldname": "currency", "label": "Currency", "fieldtype": "Data", "default": "USD" },
+    { "fieldname": "roundOffAccount", "label": "Round Off Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "discountAccount", "label": "Discount Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "setupComplete", "label": "Setup Complete", "fieldtype": "Check", "default": false },
+    { "fieldname": "enableDiscounting", "label": "Enable Discounting", "fieldtype": "Check", "default": true }
+  ]
+}

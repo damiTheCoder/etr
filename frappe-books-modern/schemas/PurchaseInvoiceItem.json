@@ -1,0 +1,7 @@
+{
+  "name": "PurchaseInvoiceItem",
+  "label": "Purchase Invoice Item",
+  "extends": "InvoiceItem",
+  "is_child": true,
+  "fields": []
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Payment",
+  "label": "Payment",
+  "naming": "numberSeries",
+  "is_submittable": true,
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "PAY-" },
+    { "fieldname": "party", "label": "Party", "fieldtype": "Link", "target": "Party", "required": true },
+    { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
+    { "fieldname": "amount", "label": "Amount", "fieldtype": "Currency", "required": true, "default": 0 },
+    { "fieldname": "paymentType", "label": "Type", "fieldtype": "Select", "required": true, "options": [
+      {"value": "Receive", "label": "Receive"}, {"value": "Pay", "label": "Pay"}
+    ]},
+    { "fieldname": "paymentMethod", "label": "Payment Method", "fieldtype": "Select", "options": [
+      {"value": "Cash", "label": "Cash"},
+      {"value": "Cheque", "label": "Cheque"},
+      {"value": "Transfer", "label": "Bank Transfer"}
+    ]},
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account", "required": true },
+    { "fieldname": "paymentFor", "label": "Payment References", "fieldtype": "Table", "target": "PaymentFor" },
+    { "fieldname": "referenceType", "label": "Reference Type", "fieldtype": "Link", "target": "Invoice" },
+    { "fieldname": "referenceName", "label": "Reference Name", "fieldtype": "Data" },
+    { "fieldname": "referenceNumber", "label": "Cheque/Transaction No", "fieldtype": "Data" },
+    { "fieldname": "clearanceDate", "label": "Clearance Date", "fieldtype": "Date" },
+    { "fieldname": "userRemark", "label": "User Remark", "fieldtype": "Text" },
+    { "fieldname": "approvalStatus", "label": "Approval Status", "fieldtype": "Select", "options": [
+      {"value": "Pending", "label": "Pending"},
+      {"value": "Approved", "label": "Approved"},
+      {"value": "Rejected", "label": "Rejected"}
+    ], "default": "Pending" },
+    { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
+    { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false }
+  ],
+  "keywordFields": ["name", "party"]
+}

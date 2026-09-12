@@ -1,0 +1,12 @@
+{
+  "name": "ReconciliationEntry",
+  "label": "Reconciliation Entry",
+  "fields": [
+    { "fieldname": "ledgerEntry", "label": "Ledger Entry", "fieldtype": "Link", "target": "AccountingLedgerEntry", "required": true },
+    { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
+    { "fieldname": "debit", "label": "Debit", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "credit", "label": "Credit", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "reference", "label": "Reference", "fieldtype": "Data" },
+    { "fieldname": "selected", "label": "Selected", "fieldtype": "Check", "default": false }
+  ]
+}

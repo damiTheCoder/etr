@@ -1,0 +1,23 @@
+{
+  "name": "Item",
+  "label": "Item",
+  "naming": "numberSeries",
+  "fields": [
+    { "fieldname": "name", "label": "Item Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "ITEM-" },
+    { "fieldname": "rate", "label": "Rate", "fieldtype": "Currency", "required": true, "default": 0 },
+    { "fieldname": "unit", "label": "Unit", "fieldtype": "Link", "target": "UOM", "default": "Nos" },
+    { "fieldname": "itemType", "label": "Item Type", "fieldtype": "Select", "options": [
+      {"value": "Product", "label": "Product"},
+      {"value": "Service", "label": "Service"}
+    ], "default": "Product"},
+    { "fieldname": "incomeAccount", "label": "Income Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "expenseAccount", "label": "Expense Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "tax", "label": "Tax", "fieldtype": "Link", "target": "Tax" },
+    { "fieldname": "description", "label": "Description", "fieldtype": "Text" },
+    { "fieldname": "stockUom", "label": "Stock UOM", "fieldtype": "Link", "target": "UOM", "default": "Nos" },
+    { "fieldname": "openingStock", "label": "Opening Stock", "fieldtype": "Float", "default": 0 },
+    { "fieldname": "openingStockRate", "label": "Opening Stock Rate", "fieldtype": "Currency", "default": 0 }
+  ],
+  "keywordFields": ["name"]
+}

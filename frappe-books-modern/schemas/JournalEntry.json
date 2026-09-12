@@ -1,0 +1,34 @@
+{
+  "name": "JournalEntry",
+  "label": "Journal Entry",
+  "naming": "numberSeries",
+  "is_submittable": true,
+  "fields": [
+    { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "JE-" },
+    { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
+    { "fieldname": "entryType", "label": "Entry Type", "fieldtype": "Select", "options": [
+      {"value": "Journal Entry", "label": "Journal Entry"},
+      {"value": "Opening Entry", "label": "Opening Entry"},
+      {"value": "Depreciation Entry", "label": "Depreciation Entry"},
+      {"value": "Adjustment Entry", "label": "Adjustment Entry"},
+      {"value": "Closing Entry", "label": "Closing Entry"},
+      {"value": "Reversal Entry", "label": "Reversal Entry"},
+      {"value": "Write Off Entry", "label": "Write Off Entry"},
+      {"value": "Bank Reconciliation", "label": "Bank Reconciliation"}
+    ]},
+    { "fieldname": "accounts", "label": "Accounting Entries", "fieldtype": "Table", "target": "JournalEntryAccount" },
+    { "fieldname": "referenceNumber", "label": "Reference Number", "fieldtype": "Data" },
+    { "fieldname": "referenceDate", "label": "Reference Date", "fieldtype": "Date" },
+    { "fieldname": "userRemark", "label": "User Remark", "fieldtype": "Text" },
+    { "fieldname": "approvalStatus", "label": "Approval Status", "fieldtype": "Select", "options": [
+      {"value": "Pending", "label": "Pending"},
+      {"value": "Approved", "label": "Approved"},
+      {"value": "Rejected", "label": "Rejected"}
+    ], "default": "Pending" },
+    { "fieldname": "attachment", "label": "Attachment", "fieldtype": "Attachment" },
+    { "fieldname": "totalDebit", "label": "Total Debit", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "totalCredit", "label": "Total Credit", "fieldtype": "Currency", "read_only": true, "default": 0 },
+    { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
+    { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false }
+  ]
+}

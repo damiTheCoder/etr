@@ -1,0 +1,9 @@
+{
+  "name": "Defaults",
+  "label": "Defaults",
+  "is_single": true,
+  "fields": [
+    { "fieldname": "salesPaymentAccount", "label": "Sales Payment Account", "fieldtype": "Link", "target": "Account" },
+    { "fieldname": "purchasePaymentAccount", "label": "Purchase Payment Account", "fieldtype": "Link", "target": "Account" }
+  ]
+}

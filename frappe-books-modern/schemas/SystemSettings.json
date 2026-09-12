@@ -1,0 +1,10 @@
+{
+  "name": "SystemSettings",
+  "label": "System Settings",
+  "is_single": true,
+  "fields": [
+    { "fieldname": "currency", "label": "Currency", "fieldtype": "Data", "default": "USD" },
+    { "fieldname": "country", "label": "Country", "fieldtype": "Data", "default": "US" },
+    { "fieldname": "language", "label": "Language", "fieldtype": "Data", "default": "en" }
+  ]
+}

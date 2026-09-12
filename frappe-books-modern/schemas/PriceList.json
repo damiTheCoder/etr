@@ -1,0 +1,8 @@
+{
+  "name": "PriceList",
+  "label": "Price List",
+  "fields": [
+    { "fieldname": "name", "label": "Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "currency", "label": "Currency", "fieldtype": "Data", "default": "USD" }
+  ]
+}

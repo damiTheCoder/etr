@@ -1,0 +1,10 @@
+{
+  "name": "etr",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frappe-books-modern/frontend run dev"
+  },
+  "devDependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  }
+}

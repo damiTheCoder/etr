@@ -1,0 +1,12 @@
+{
+  "name": "JournalEntryAccount",
+  "label": "Journal Entry Account",
+  "is_child": true,
+  "fields": [
+    { "fieldname": "account", "label": "Account", "fieldtype": "Link", "target": "Account", "required": true },
+    { "fieldname": "debit", "label": "Debit", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "credit", "label": "Credit", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "party", "label": "Party", "fieldtype": "Link", "target": "Party" },
+    { "fieldname": "description", "label": "Description", "fieldtype": "Text" }
+  ]
+}
