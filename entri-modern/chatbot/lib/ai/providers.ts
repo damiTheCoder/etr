@@ -3,7 +3,7 @@ import { customProvider } from "ai";
 import { isTestEnvironment } from "../constants";
 
 const openrouter = createOpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY || "REMOVED",
+  apiKey: process.env.OPENROUTER_API_KEY || "",
   baseURL: "https://openrouter.ai/api/v1",
   headers: {
     "HTTP-Referer": "http://localhost:3000",

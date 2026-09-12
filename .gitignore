@@ -44,3 +44,11 @@ tsconfig.tsbuildinfo
 .pnp
 .pnp.js
 coverage
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/

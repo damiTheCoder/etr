@@ -16,10 +16,7 @@ from backend.core.schema_engine import Doc
 
 router = APIRouter(prefix="/api/ai", tags=["AI Agent"])
 
-OPENROUTER_API_KEY = os.environ.get(
-    "OPENROUTER_API_KEY",
-    "REMOVED"
-)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL_ID = os.environ.get("OPENROUTER_MODEL", "nex-agi/nex-n2.5-pro:free")
 
 # Full suite of 23 Tool Schemas for OpenRouter AI Agent
