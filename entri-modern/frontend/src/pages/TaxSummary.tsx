@@ -58,8 +58,8 @@ export default function TaxSummary() {
         </div>
       </div>
 
-      <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-0 px-6 py-4 bg-transparent">
+      <Card className="border-none bg-slate-100/60 shadow-2xs rounded-2xl overflow-hidden p-0">
+        <CardHeader className="border-none px-6 py-4 bg-transparent">
           <CardTitle className="text-slate-900 font-bold">Tax Ledger Accounts</CardTitle>
           <CardDescription className="text-slate-500 font-medium">
             Summary of accumulated debits, credits, and net balances
@@ -69,7 +69,7 @@ export default function TaxSummary() {
           <div className="overflow-x-auto">
             <Table className="w-full">
               <TableHeader>
-                <TableRow className="border-b border-slate-200 bg-white">
+                <TableRow className="border-b border-slate-200/40 bg-slate-200/30">
                   <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
                   <TableHead className="text-right text-slate-900 font-bold">Debit ($)</TableHead>
                   <TableHead className="text-right text-slate-900 font-bold">Credit ($)</TableHead>
@@ -80,7 +80,7 @@ export default function TaxSummary() {
                 {accountKeys.map((name) => {
                   const acct = taxAccounts[name]
                   return (
-                    <TableRow key={name} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                    <TableRow key={name} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                       <TableCell className="font-semibold text-slate-900">{name}</TableCell>
                       <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(acct.debit)}</TableCell>
                       <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(acct.credit)}</TableCell>
@@ -90,20 +90,18 @@ export default function TaxSummary() {
                 })}
                 {accountKeys.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-slate-500 py-8 bg-white">
+                    <TableCell colSpan={4} className="text-center text-slate-500 py-8 bg-transparent">
                       No tax data recorded yet
                     </TableCell>
                   </TableRow>
                 )}
-                {/* Grey Totals Summary Row */}
-                {accountKeys.length > 0 && (
-                  <TableRow className="bg-slate-200 text-slate-900 font-bold border-t-2 border-slate-300">
-                    <TableCell className="font-bold text-slate-900">TOTAL TAX SUMMARY</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalDebit)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalCredit)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalBalance)}</TableCell>
-                  </TableRow>
-                )}
+                {/* Totals Summary Row */}
+                <TableRow className="bg-slate-200/80 text-slate-900 font-bold border-t border-slate-300/60">
+                  <TableCell className="font-bold text-slate-900">TOTAL</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalDebit)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalCredit)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalBalance)}</TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>

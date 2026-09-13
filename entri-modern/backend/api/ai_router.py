@@ -16,10 +16,13 @@ from pydantic import BaseModel
 from backend.core import database as db
 from backend.core.schema_engine import Doc
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 router = APIRouter(prefix="/api/ai", tags=["AI Agent"])
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-MODEL_ID = os.environ.get("OPENROUTER_MODEL", "nex-agi/nex-n2.5-pro:free")
+MODEL_ID = os.environ.get("OPENROUTER_MODEL", "openrouter/auto")
 
 # Full suite of 23 Tool Schemas for OpenRouter AI Agent
 TOOLS_SCHEMA = [
@@ -794,9 +797,198 @@ def _local_fast_route_matcher(text: str):
         "settings": "/settings"
     }
     for phrase, route in routes_map.items():
-        if t == phrase or t == f"go to {phrase}" or t == f"show {phrase}" or t == f"open {phrase}" or t == f"take me to {phrase}":
+        if t == f"go to {phrase}" or t == f"open {phrase}" or t == f"navigate to {phrase}" or t == f"take me to {phrase}":
             return route
     return None
+
+
+def _local_fallback_intent_executor(user_text: str):
+    """
+    Local deterministic accounting NLP intent processor.
+    Matches queries to accounting tools directly when offline, rate-limited, or fallback.
+    """
+    t = user_text.strip().lower()
+
+    # Check page navigation fast matcher
+    matched_route = _local_fast_route_matcher(user_text)
+    if matched_route:
+        nav_res = _execute_navigate_to_page(matched_route)
+        return {
+            "role": "assistant",
+            "content": f"Opening {matched_route}...",
+            "executed_tools": [{
+                "name": "navigate_to_page",
+                "arguments": {"page_route": matched_route},
+                "result": nav_res
+            }]
+        }
+
+    # Customers & Parties
+    if "customer" in t or "client" in t:
+        if any(k in t for k in ["create", "add", "new", "register"]):
+            words = user_text.split()
+            name = words[-1] if len(words) > 1 and words[-1].lower() not in ["customer", "client", "for"] else "New Customer"
+            res = _execute_create_party(name=name, party_type="Customer")
+            return {
+                "role": "assistant",
+                "content": f"Created customer **{name}**.",
+                "executed_tools": [{"name": "create_party", "arguments": {"name": name, "party_type": "Customer"}, "result": res}]
+            }
+        res = _execute_get_customers()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('customers', [])))} customer(s) from the database.",
+            "executed_tools": [{"name": "get_customers", "arguments": {}, "result": res}]
+        }
+
+    if any(k in t for k in ["party", "parties", "supplier", "vendor"]):
+        p_type = "Supplier" if any(k in t for k in ["supplier", "vendor"]) else "Customer"
+        if any(k in t for k in ["create", "add", "new"]):
+            words = user_text.split()
+            name = words[-1] if len(words) > 1 else f"New {p_type}"
+            res = _execute_create_party(name=name, party_type=p_type)
+            return {
+                "role": "assistant",
+                "content": f"Created {p_type.lower()} **{name}**.",
+                "executed_tools": [{"name": "create_party", "arguments": {"name": name, "party_type": p_type}, "result": res}]
+            }
+        res = _execute_get_parties(party_type=p_type)
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('parties', [])))} {p_type.lower()}(s).",
+            "executed_tools": [{"name": "get_parties", "arguments": {"party_type": p_type}, "result": res}]
+        }
+
+    # Invoices
+    if "purchase invoice" in t or "pinv" in t or "bill" in t:
+        if any(k in t for k in ["create", "add", "new", "generate", "post", "make"]):
+            res = _execute_create_purchase_invoice(supplier="Vendor", items=[{"item_code": "Supplies", "qty": 1, "rate": 100}])
+            return {
+                "role": "assistant",
+                "content": f"Created purchase invoice **{res.get('invoice_name')}** for {res.get('supplier')}.",
+                "executed_tools": [{"name": "create_purchase_invoice", "arguments": {"supplier": "Vendor", "items": [{"item_code": "Supplies", "qty": 1, "rate": 100}]}, "result": res}]
+            }
+        res = _execute_get_purchase_invoices()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('invoices', [])))} purchase invoice(s).",
+            "executed_tools": [{"name": "get_purchase_invoices", "arguments": {}, "result": res}]
+        }
+
+    if "sales invoice" in t or "invoice" in t or "sinv" in t:
+        if any(k in t for k in ["create", "add", "new", "generate", "post", "make"]):
+            # Extract customer name if possible
+            customer = "Acme Corp"
+            if " for " in t:
+                parts = user_text.split(" for ")
+                if len(parts) > 1:
+                    customer = parts[1].split()[0]
+            res = _execute_create_sales_invoice(customer=customer, items=[{"item_code": "Consulting Services", "qty": 1, "rate": 500}])
+            return {
+                "role": "assistant",
+                "content": f"Created sales invoice **{res.get('invoice_name')}** for {customer} total {res.get('grand_total')}.",
+                "executed_tools": [{"name": "create_sales_invoice", "arguments": {"customer": customer, "items": [{"item_code": "Consulting Services", "qty": 1, "rate": 500}]}, "result": res}]
+            }
+        res = _execute_get_sales_invoices()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('invoices', [])))} sales invoice(s).",
+            "executed_tools": [{"name": "get_sales_invoices", "arguments": {}, "result": res}]
+        }
+
+    # Payments
+    if "payment" in t or "pay" in t or "receipt" in t:
+        res = _execute_get_payments()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('payments', [])))} payment record(s).",
+            "executed_tools": [{"name": "get_payments", "arguments": {}, "result": res}]
+        }
+
+    # Journal Entries
+    if "journal" in t or "je-" in t or "entry" in t:
+        res = _execute_get_journal_entries()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('entries', [])))} journal entry record(s).",
+            "executed_tools": [{"name": "get_journal_entries", "arguments": {}, "result": res}]
+        }
+
+    # Purchase Orders
+    if "purchase order" in t or "order" in t or "po-" in t:
+        res = _execute_get_purchase_orders()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('orders', [])))} purchase order(s).",
+            "executed_tools": [{"name": "get_purchase_orders", "arguments": {}, "result": res}]
+        }
+
+    # Items / Inventory
+    if "item" in t or "product" in t or "stock" in t or "inventory" in t:
+        res = _execute_get_items()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved {res.get('total', len(res.get('items', [])))} item(s) from catalog.",
+            "executed_tools": [{"name": "get_items", "arguments": {}, "result": res}]
+        }
+
+    # Accounts / COA
+    if "account" in t or "coa" in t or "chart of accounts" in t:
+        res = _execute_get_accounts()
+        return {
+            "role": "assistant",
+            "content": f"Retrieved Chart of Accounts.",
+            "executed_tools": [{"name": "get_accounts", "arguments": {}, "result": res}]
+        }
+
+    # Financial Reports & Metrics
+    if any(k in t for k in ["profit", "loss", "p&l", "income", "expense", "revenue"]):
+        res = _execute_get_profit_and_loss()
+        return {
+            "role": "assistant",
+            "content": f"Calculated Profit & Loss summary. Total Income: {res.get('income', {}).get('total', 0)}, Total Expenses: {res.get('expenses', {}).get('total', 0)}, Net Profit: {res.get('netProfit', 0)}.",
+            "executed_tools": [{"name": "get_profit_and_loss", "arguments": {}, "result": res}]
+        }
+
+    if "balance sheet" in t:
+        res = _execute_get_balance_sheet()
+        return {
+            "role": "assistant",
+            "content": "Retrieved Balance Sheet statement.",
+            "executed_tools": [{"name": "get_balance_sheet", "arguments": {}, "result": res}]
+        }
+
+    if "trial balance" in t:
+        res = _execute_get_trial_balance()
+        return {
+            "role": "assistant",
+            "content": "Retrieved Trial Balance statement.",
+            "executed_tools": [{"name": "get_trial_balance", "arguments": {}, "result": res}]
+        }
+
+    if "ledger" in t:
+        res = _execute_get_general_ledger()
+        return {
+            "role": "assistant",
+            "content": "Retrieved General Ledger entries.",
+            "executed_tools": [{"name": "get_general_ledger", "arguments": {}, "result": res}]
+        }
+
+    if "aging" in t:
+        res = _execute_get_aging_report()
+        return {
+            "role": "assistant",
+            "content": "Retrieved Accounts Aging breakdown.",
+            "executed_tools": [{"name": "get_aging_report", "arguments": {}, "result": res}]
+        }
+
+    # Fallback default summary
+    metrics = _execute_get_dashboard_metrics()
+    return {
+        "role": "assistant",
+        "content": "Here is an overview of your current accounting metrics.",
+        "executed_tools": [{"name": "get_dashboard_metrics", "arguments": {}, "result": metrics}]
+    }
 
 
 @router.post("/chat")
@@ -818,148 +1010,145 @@ async def ai_chat_endpoint(req: ChatRequest):
             }]
         }
 
-    # LEVEL 2: Single-Turn Intent Parsing via Next N2 API (1 API Call max)
+    # LEVEL 2: Single-Turn Intent Parsing via Next N2 API with Local Fallback
     system_prompt = {
         "role": "system",
         "content": (
-            "You are entri AI language processor. Your job is ONLY to select the best accounting tool to execute "
-            "based on user input. Available tools: get_customers, get_parties, create_party, get_sales_invoices, "
+            "You are entri AI accounting assistant. Your responses must be neat, professional, and clear. "
+            "Do NOT use raw markdown asterisks (**) or raw markdown syntax symbols in text. "
+            "Provide clean, well-formatted plain text. "
+            "Available tools: get_customers, get_parties, create_party, get_sales_invoices, "
             "create_sales_invoice, get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, "
             "get_journal_entries, create_journal_entry, get_purchase_orders, create_purchase_order, get_items, "
             "create_item, get_accounts, get_dashboard_metrics, get_profit_and_loss, get_balance_sheet, get_general_ledger, "
             "get_trial_balance, get_aging_report, navigate_to_page. "
-            "Call the appropriate tool with arguments."
+            "Call the appropriate tool with arguments when helpful."
         )
     }
     
     full_messages = [system_prompt] + messages_payload
     executed_tool_results = []
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        # 1-2 Turn lightweight execution
-        for step in range(3):
-            body = {
-                "model": MODEL_ID,
-                "messages": full_messages,
-                "tools": TOOLS_SCHEMA,
-                "max_tokens": 500
-            }
-            headers = {
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "http://localhost:3000",
-                "X-Title": "entri Accounting AI"
-            }
-            
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json=body,
-                headers=headers
-            )
+    api_key = os.environ.get("OPENROUTER_API_KEY") or OPENROUTER_API_KEY
+    model_id = os.environ.get("OPENROUTER_MODEL") or MODEL_ID
 
-            if response.status_code == 429:
-                retry_after = float(response.headers.get("Retry-After", 2))
-                if step < 2:
-                    await asyncio.sleep(min(retry_after, 10))
-                    continue
-                raise HTTPException(
-                    status_code=429,
-                    detail="The AI service is busy right now. Please try again in a moment."
-                )
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"OpenRouter API error: {response.text}"
-                )
-            
-            res_json = response.json()
-            choice = res_json["choices"][0]
-            msg = choice["message"]
-
-            tool_calls = msg.get("tool_calls")
-            if tool_calls:
-                full_messages.append(msg)
-                for tc in tool_calls:
-                    fn = tc.get("function", {})
-                    fn_name = fn.get("name")
-                    fn_args = json.loads(fn.get("arguments", "{}"))
-
-                    # Deterministic Local Accounting Execution (0 API calls for logic)
-                    tool_output = None
-                    try:
-                        if fn_name == "get_customers":
-                            tool_output = _execute_get_customers(**fn_args)
-                        elif fn_name == "get_parties":
-                            tool_output = _execute_get_parties(**fn_args)
-                        elif fn_name == "create_party":
-                            tool_output = _execute_create_party(**fn_args)
-                        elif fn_name == "get_sales_invoices":
-                            tool_output = _execute_get_sales_invoices(**fn_args)
-                        elif fn_name == "create_sales_invoice":
-                            tool_output = _execute_create_sales_invoice(**fn_args)
-                        elif fn_name == "get_purchase_invoices":
-                            tool_output = _execute_get_purchase_invoices(**fn_args)
-                        elif fn_name == "create_purchase_invoice":
-                            tool_output = _execute_create_purchase_invoice(**fn_args)
-                        elif fn_name == "get_payments":
-                            tool_output = _execute_get_payments(**fn_args)
-                        elif fn_name == "create_payment":
-                            tool_output = _execute_create_payment(**fn_args)
-                        elif fn_name == "get_journal_entries":
-                            tool_output = _execute_get_journal_entries(**fn_args)
-                        elif fn_name == "create_journal_entry":
-                            tool_output = _execute_create_journal_entry(**fn_args)
-                        elif fn_name == "get_purchase_orders":
-                            tool_output = _execute_get_purchase_orders(**fn_args)
-                        elif fn_name == "create_purchase_order":
-                            tool_output = _execute_create_purchase_order(**fn_args)
-                        elif fn_name == "get_items":
-                            tool_output = _execute_get_items(**fn_args)
-                        elif fn_name == "create_item":
-                            tool_output = _execute_create_item(**fn_args)
-                        elif fn_name == "get_accounts":
-                            tool_output = _execute_get_accounts(**fn_args)
-                        elif fn_name == "get_dashboard_metrics":
-                            tool_output = _execute_get_dashboard_metrics(**fn_args)
-                        elif fn_name == "get_profit_and_loss":
-                            tool_output = _execute_get_profit_and_loss(**fn_args)
-                        elif fn_name == "get_balance_sheet":
-                            tool_output = _execute_get_balance_sheet(**fn_args)
-                        elif fn_name == "get_general_ledger":
-                            tool_output = _execute_get_general_ledger(**fn_args)
-                        elif fn_name == "get_trial_balance":
-                            tool_output = _execute_get_trial_balance(**fn_args)
-                        elif fn_name == "get_aging_report":
-                            tool_output = _execute_get_aging_report(**fn_args)
-                        elif fn_name == "navigate_to_page":
-                            tool_output = _execute_navigate_to_page(**fn_args)
-                        else:
-                            tool_output = {"error": f"Unknown tool {fn_name}"}
-                    except Exception as err:
-                        tool_output = {"error": str(err)}
-
-                    executed_tool_results.append({
-                        "name": fn_name,
-                        "arguments": fn_args,
-                        "result": tool_output
-                    })
-
-                    full_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.get("id"),
-                        "name": fn_name,
-                        "content": json.dumps(tool_output)
-                    })
-            else:
-                return {
-                    "role": "assistant",
-                    "content": msg.get("content", ""),
-                    "executed_tools": executed_tool_results
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1-2 Turn lightweight execution
+            for step in range(3):
+                body = {
+                    "model": model_id,
+                    "messages": full_messages,
+                    "tools": TOOLS_SCHEMA,
+                    "max_tokens": 500
                 }
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "http://localhost:3000",
+                    "X-Title": "entri Accounting AI"
+                }
+                
+                response = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    json=body,
+                    headers=headers
+                )
 
-        return {
-            "role": "assistant",
-            "content": full_messages[-1].get("content", "Task executed successfully."),
-            "executed_tools": executed_tool_results
-        }
+                if response.status_code != 200:
+                    print(f"OpenRouter API error status {response.status_code}: {response.text}")
+                    return _local_fallback_intent_executor(last_user_msg)
+                
+                res_json = response.json()
+                choice = res_json["choices"][0]
+                msg = choice["message"]
+
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    full_messages.append(msg)
+                    for tc in tool_calls:
+                        fn = tc.get("function", {})
+                        fn_name = fn.get("name")
+                        fn_args = json.loads(fn.get("arguments", "{}"))
+
+                        tool_output = None
+                        try:
+                            if fn_name == "get_customers":
+                                tool_output = _execute_get_customers(**fn_args)
+                            elif fn_name == "get_parties":
+                                tool_output = _execute_get_parties(**fn_args)
+                            elif fn_name == "create_party":
+                                tool_output = _execute_create_party(**fn_args)
+                            elif fn_name == "get_sales_invoices":
+                                tool_output = _execute_get_sales_invoices(**fn_args)
+                            elif fn_name == "create_sales_invoice":
+                                tool_output = _execute_create_sales_invoice(**fn_args)
+                            elif fn_name == "get_purchase_invoices":
+                                tool_output = _execute_get_purchase_invoices(**fn_args)
+                            elif fn_name == "create_purchase_invoice":
+                                tool_output = _execute_create_purchase_invoice(**fn_args)
+                            elif fn_name == "get_payments":
+                                tool_output = _execute_get_payments(**fn_args)
+                            elif fn_name == "create_payment":
+                                tool_output = _execute_create_payment(**fn_args)
+                            elif fn_name == "get_journal_entries":
+                                tool_output = _execute_get_journal_entries(**fn_args)
+                            elif fn_name == "create_journal_entry":
+                                tool_output = _execute_create_journal_entry(**fn_args)
+                            elif fn_name == "get_purchase_orders":
+                                tool_output = _execute_get_purchase_orders(**fn_args)
+                            elif fn_name == "create_purchase_order":
+                                tool_output = _execute_create_purchase_order(**fn_args)
+                            elif fn_name == "get_items":
+                                tool_output = _execute_get_items(**fn_args)
+                            elif fn_name == "create_item":
+                                tool_output = _execute_create_item(**fn_args)
+                            elif fn_name == "get_accounts":
+                                tool_output = _execute_get_accounts(**fn_args)
+                            elif fn_name == "get_dashboard_metrics":
+                                tool_output = _execute_get_dashboard_metrics(**fn_args)
+                            elif fn_name == "get_profit_and_loss":
+                                tool_output = _execute_get_profit_and_loss(**fn_args)
+                            elif fn_name == "get_balance_sheet":
+                                tool_output = _execute_get_balance_sheet(**fn_args)
+                            elif fn_name == "get_general_ledger":
+                                tool_output = _execute_get_general_ledger(**fn_args)
+                            elif fn_name == "get_trial_balance":
+                                tool_output = _execute_get_trial_balance(**fn_args)
+                            elif fn_name == "get_aging_report":
+                                tool_output = _execute_get_aging_report(**fn_args)
+                            elif fn_name == "navigate_to_page":
+                                tool_output = _execute_navigate_to_page(**fn_args)
+                            else:
+                                tool_output = {"error": f"Unknown tool {fn_name}"}
+                        except Exception as err:
+                            tool_output = {"error": str(err)}
+
+                        executed_tool_results.append({
+                            "name": fn_name,
+                            "arguments": fn_args,
+                            "result": tool_output
+                        })
+
+                        full_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.get("id"),
+                            "name": fn_name,
+                            "content": json.dumps(tool_output)
+                        })
+                else:
+                    return {
+                        "role": "assistant",
+                        "content": msg.get("content", ""),
+                        "executed_tools": executed_tool_results
+                    }
+
+            return {
+                "role": "assistant",
+                "content": full_messages[-1].get("content", "Task executed successfully."),
+                "executed_tools": executed_tool_results
+            }
+
+    except Exception as api_err:
+        print(f"OpenRouter connection error ({api_err}), executing deterministic local intent handler.")
+        return _local_fallback_intent_executor(last_user_msg)

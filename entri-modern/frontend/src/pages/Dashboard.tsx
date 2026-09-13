@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { BrandBanner } from '@/components/dashboard/brand-banner'
 
 interface ChartPoint {
   label: string
@@ -82,6 +83,8 @@ function buildChartData(
   const now = new Date()
   const points: ChartPoint[] = []
 
+  const isSubmitted = (item: any) => Boolean(item.submitted && item.submitted !== 0 && !item.cancelled)
+
   if (period === 'day') {
     // Last 30 days
     let running = 0
@@ -102,20 +105,20 @@ function buildChartData(
           }
         }
       } else if (metric === 'revenue') {
-        val = daySales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
+        val = daySales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
       } else if (metric === 'expenses') {
-        val = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        val = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
       } else if (metric === 'profit') {
-        const r = daySales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
-        const e = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        const r = daySales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        const e = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
         val = r - e
       } else if (metric === 'ar') {
         val = daySales
-          .filter((s: any) => s.submitted && !s.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
       } else if (metric === 'ap') {
         val = dayPurchases
-          .filter((p: any) => p.submitted && !p.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
       }
 
@@ -142,20 +145,20 @@ function buildChartData(
           }
         }
       } else if (metric === 'revenue') {
-        val = monthSales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
+        val = monthSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
       } else if (metric === 'expenses') {
-        val = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        val = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
       } else if (metric === 'profit') {
-        const r = monthSales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
-        const e = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        const r = monthSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        const e = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
         val = r - e
       } else if (metric === 'ar') {
         val = monthSales
-          .filter((s: any) => s.submitted && !s.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
       } else if (metric === 'ap') {
         val = monthPurchases
-          .filter((p: any) => p.submitted && !p.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
       }
 
@@ -182,20 +185,20 @@ function buildChartData(
           }
         }
       } else if (metric === 'revenue') {
-        val = yearSales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
+        val = yearSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
       } else if (metric === 'expenses') {
-        val = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        val = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
       } else if (metric === 'profit') {
-        const r = yearSales.reduce((sum: number, s: any) => sum + Number(s.baseGrandTotal || 0), 0)
-        const e = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.baseGrandTotal || 0), 0)
+        const r = yearSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        const e = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
         val = r - e
       } else if (metric === 'ar') {
         val = yearSales
-          .filter((s: any) => s.submitted && !s.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
       } else if (metric === 'ap') {
         val = yearPurchases
-          .filter((p: any) => p.submitted && !p.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
       }
 
@@ -216,6 +219,7 @@ export default function Dashboard() {
   const [accountsPayable, setAccountsPayable] = useState(0)
   const [recentSales, setRecentSales] = useState<any[]>([])
   const [recentEntries, setRecentEntries] = useState<any[]>([])
+  const [bannerMetrics, setBannerMetrics] = useState<any>(undefined)
 
   // Raw data for dynamic recomputation
   const [rawData, setRawData] = useState<RawData>({ sales: [], purchases: [], entries: [] })
@@ -235,40 +239,58 @@ export default function Dashboard() {
   }
 
   function formatCurrency(v: number) {
+    const abs = Math.abs(v || 0)
+    const sign = v < 0 ? '-' : ''
+    if (abs >= 1_000_000) {
+      const formatted = (abs / 1_000_000).toFixed(1).replace(/\.0$/, '')
+      return `${sign}$${formatted}M`
+    }
+    if (abs >= 1_000) {
+      const formatted = (abs / 1_000).toFixed(1).replace(/\.0$/, '')
+      return `${sign}$${formatted}k`
+    }
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0)
+  }
+
+  function formatFullCurrency(v: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0)
   }
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [sales, purchases, pl, ledger] = await Promise.all([
+        const [sales, purchases, pl, ledger, bs, tb] = await Promise.all([
           api.list('SalesInvoice'),
           api.list('PurchaseInvoice'),
           api.getReport('profit-and-loss'),
           api.getReport('general-ledger'),
+          api.getReport('balance-sheet'),
+          api.getReport('trial-balance'),
         ])
 
         setRecentSales((sales as any[]).slice(0, 5))
-        const revTotal = (sales as any[]).reduce((s, i) => s + Number(i.baseGrandTotal || 0), 0)
-        const expTotal = (purchases as any[]).reduce((s, i) => s + Number(i.baseGrandTotal || 0), 0)
+        const revTotal = (sales as any[]).reduce((s, i) => s + Number(i.grandTotal || i.baseGrandTotal || 0), 0)
+        const expTotal = (purchases as any[]).reduce((s, i) => s + Number(i.grandTotal || i.baseGrandTotal || 0), 0)
 
-        const finalRev = revTotal
-        const finalExp = expTotal
+        const finalRev = (pl as any)?.income?.total ?? revTotal
+        const finalExp = (pl as any)?.expenses?.total ?? expTotal
         const finalProfit = (pl as any)?.netProfit ?? (finalRev - finalExp)
 
         setTotalRevenue(finalRev)
         setTotalExpenses(finalExp)
         setNetProfit(finalProfit)
 
+        const isSubmitted = (inv: any) => Boolean(inv.submitted && inv.submitted !== 0 && !inv.cancelled)
+
         // Accounts Receivable
         const arTotal = (sales as any[])
-          .filter((inv: any) => inv.submitted && !inv.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, inv: any) => sum + Number(inv.outstandingAmount || 0), 0)
         setAccountsReceivable(arTotal)
 
         // Accounts Payable
         const apTotal = (purchases as any[])
-          .filter((inv: any) => inv.submitted && !inv.cancelled)
+          .filter(isSubmitted)
           .reduce((sum: number, inv: any) => sum + Number(inv.outstandingAmount || 0), 0)
         setAccountsPayable(apTotal)
 
@@ -276,12 +298,34 @@ export default function Dashboard() {
         setRecentEntries(entries.slice(-10).reverse())
 
         let cashSum = 0
+        let cashInflow = 0
+        let cashOutflow = 0
+
         for (const e of entries) {
           if (['Bank Account', 'Cash', 'Bank', 'Petty Cash'].includes(e.account)) {
-            cashSum += Number(e.debit || 0) - Number(e.credit || 0)
+            const dr = Number(e.debit || 0)
+            const cr = Number(e.credit || 0)
+            cashInflow += dr
+            cashOutflow += cr
+            cashSum += (dr - cr)
           }
         }
         setCashBalance(cashSum)
+
+        // Set financial metrics for BrandBanner
+        setBannerMetrics({
+          cashInflow,
+          cashOutflow,
+          cashNet: cashSum,
+          revenue: finalRev,
+          expenses: finalExp,
+          netProfit: finalProfit,
+          totalAssets: (bs as any)?.assets?.total ?? 0,
+          totalLiabilities: (bs as any)?.liabilities?.total ?? 0,
+          totalEquity: (bs as any)?.equity?.total ?? 0,
+          totalDebit: (tb as any)?.totalDebit ?? 0,
+          totalCredit: (tb as any)?.totalCredit ?? 0,
+        })
 
         // Store raw data for period-based recomputation
         setRawData({ sales: sales as any[], purchases: purchases as any[], entries })
@@ -352,6 +396,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Embedded Brand Integrations Banner */}
+      <BrandBanner metrics={bannerMetrics} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
@@ -377,7 +424,7 @@ export default function Dashboard() {
               <PeriodSelector value={cashPeriod} onChange={setCashPeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Price in USD vs Date trajectory</CardDescription>
-            <div className="text-3xl font-bold text-slate-900 pt-1">{formatCurrency(cashBalance)}</div>
+            <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(cashBalance)}</div>
             <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
               Trending up by 8.4% this month <TrendingUp className="h-3.5 w-3.5" />
             </div>
@@ -398,7 +445,7 @@ export default function Dashboard() {
               <PeriodSelector value={revenuePeriod} onChange={setRevenuePeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Gross sales price in USD vs Date</CardDescription>
-            <div className="text-3xl font-bold text-slate-900 pt-1">{formatCurrency(totalRevenue)}</div>
+            <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalRevenue)}</div>
             <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
               Trending up by 14.2% this month <TrendingUp className="h-3.5 w-3.5" />
             </div>
@@ -419,7 +466,7 @@ export default function Dashboard() {
               <PeriodSelector value={expensesPeriod} onChange={setExpensesPeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Operational cost in USD vs Date</CardDescription>
-            <div className="text-3xl font-bold text-slate-900 pt-1">{formatCurrency(totalExpenses)}</div>
+            <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalExpenses)}</div>
             <div className="flex items-center gap-1.5 font-medium text-amber-600 text-xs pt-1">
               Controlled expense trajectory <TrendingDown className="h-3.5 w-3.5" />
             </div>
@@ -440,7 +487,7 @@ export default function Dashboard() {
               <PeriodSelector value={profitPeriod} onChange={setProfitPeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Net earnings in USD vs Date</CardDescription>
-            <div className={`text-3xl font-bold pt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            <div className={`text-3xl font-semibold pt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {formatCurrency(netProfit)}
             </div>
             <div className={`flex items-center gap-1.5 font-medium text-xs pt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -464,7 +511,7 @@ export default function Dashboard() {
               <PeriodSelector value={arPeriod} onChange={setArPeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Outstanding from sales invoices</CardDescription>
-            <div className="text-3xl font-bold text-sky-600 pt-1">{formatCurrency(accountsReceivable)}</div>
+            <div className="text-3xl font-semibold text-sky-600 pt-1">{formatCurrency(accountsReceivable)}</div>
             <div className="flex items-center gap-1.5 font-medium text-sky-600 text-xs pt-1">
               {accountsReceivable > 0 ? 'Pending customer payments' : 'All receivables collected'}
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -486,7 +533,7 @@ export default function Dashboard() {
               <PeriodSelector value={apPeriod} onChange={setApPeriod} />
             </div>
             <CardDescription className="text-xs text-slate-500">Outstanding on purchase invoices</CardDescription>
-            <div className="text-3xl font-bold text-rose-600 pt-1">{formatCurrency(accountsPayable)}</div>
+            <div className="text-3xl font-semibold text-rose-600 pt-1">{formatCurrency(accountsPayable)}</div>
             <div className="flex items-center gap-1.5 font-medium text-rose-600 text-xs pt-1">
               {accountsPayable > 0 ? 'Pending vendor payments' : 'All payables settled'}
               <ArrowDownRight className="h-3.5 w-3.5" />
@@ -523,8 +570,8 @@ export default function Dashboard() {
                   <TableRow key={entry.name}>
                     <TableCell className="font-medium">{entry.account}</TableCell>
                     <TableCell className="text-gray-500">{entry.date}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(entry.debit)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(entry.credit)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatFullCurrency(entry.debit)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatFullCurrency(entry.credit)}</TableCell>
                   </TableRow>
                 ))}
                 {recentEntries.length === 0 && (
@@ -563,7 +610,7 @@ export default function Dashboard() {
                       </Link>
                     </TableCell>
                     <TableCell className="text-gray-500">{inv.party}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatCurrency(inv.baseGrandTotal)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatFullCurrency(inv.grandTotal || inv.baseGrandTotal)}</TableCell>
                     <TableCell>
                       <Badge variant={inv.submitted ? 'default' : 'secondary'}>
                         {inv.submitted ? 'Submitted' : 'Draft'}

@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any, Optional
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware

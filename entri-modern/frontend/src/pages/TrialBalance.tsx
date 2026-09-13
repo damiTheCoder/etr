@@ -91,8 +91,8 @@ export default function TrialBalance() {
         </div>
       </div>
 
-      <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-0 px-6 py-4 bg-transparent">
+      <Card className="border-none bg-slate-100/60 shadow-2xs rounded-2xl overflow-hidden p-0">
+        <CardHeader className="border-none px-6 py-4 bg-transparent">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-slate-900 font-bold">Trial Balance Summary</CardTitle>
@@ -111,7 +111,7 @@ export default function TrialBalance() {
           <div className="overflow-x-auto">
             <Table className="w-full">
               <TableHeader>
-                <TableRow className="border-b border-slate-200 bg-white">
+                <TableRow className="border-b border-slate-200/40 bg-slate-200/30">
                   <TableHead className="w-[100px] text-slate-900 font-bold">Number</TableHead>
                   <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
                   <TableHead className="w-[110px] text-slate-900 font-bold">Root Type</TableHead>
@@ -121,7 +121,7 @@ export default function TrialBalance() {
               </TableHeader>
               <TableBody>
                 {accountsList.map((row: any) => (
-                  <TableRow key={row.account} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                  <TableRow key={row.account} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                     <TableCell className="font-mono text-sm text-slate-600">{row.accountNumber || '—'}</TableCell>
                     <TableCell className="font-semibold text-slate-900">{row.account}</TableCell>
                     <TableCell>
@@ -139,13 +139,13 @@ export default function TrialBalance() {
                 ))}
                 {accountsList.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-slate-500 py-16 bg-white">
+                    <TableCell colSpan={5} className="text-center text-slate-500 py-16 bg-transparent">
                       No trial balance data available for the selected period
                     </TableCell>
                   </TableRow>
                 )}
                 {data && (
-                  <TableRow className="bg-slate-200 text-slate-900 font-bold border-t-2 border-slate-300">
+                  <TableRow className="bg-slate-200/80 text-slate-900 font-bold border-t border-slate-300/60">
                     <TableCell colSpan={3} className="font-bold text-slate-900 text-right pr-4">TOTAL</TableCell>
                     <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(data.totalDebit)}</TableCell>
                     <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(data.totalCredit)}</TableCell>

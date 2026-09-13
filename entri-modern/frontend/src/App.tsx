@@ -23,10 +23,12 @@ import {
   Settings,
   PanelLeft,
   X,
+  Sparkles,
 } from 'lucide-react'
 
 import Dashboard from './pages/Dashboard'
 import AIChat from './pages/AIChat'
+import { ChatModal } from './components/ui/chat'
 import SalesInvoices from './pages/SalesInvoices'
 import SalesInvoiceForm from './pages/SalesInvoiceForm'
 import PurchaseInvoices from './pages/PurchaseInvoices'
@@ -83,14 +85,6 @@ function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-white relative">
-      {/* Blurry Glass Backdrop Overlay over full app when AI Modal is open */}
-      {isAIModalOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-md transition-all duration-300 animate-in fade-in"
-          onClick={() => setIsAIModalOpen(false)}
-          aria-hidden="true"
-        />
-      )}
 
       {/* Mobile sidebar backdrop overlay */}
       {sidebarOpen && (
@@ -104,7 +98,7 @@ function AppLayout() {
       {/* Sidebar navigation */}
       <aside
         id="app-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-slate-200/80 transition-all duration-200 ease-in-out md:static md:translate-x-0 h-full max-h-screen overflow-hidden ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-slate-200/80 md:border-r-0 transition-all duration-200 ease-in-out md:static md:translate-x-0 h-full max-h-screen overflow-hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} ${
           isAIModalOpen ? 'blur-[3px] opacity-75 pointer-events-none' : ''
@@ -326,7 +320,7 @@ function AppLayout() {
       {/* Main Content Viewport */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
         {/* Top Header Bar with Top-Left Sidebar Toggle Icon */}
-        <header className="flex h-14 shrink-0 items-center justify-between px-4 border-b border-slate-200/80 md:border-b-0 bg-white">
+        <header className="flex h-14 shrink-0 items-center justify-between px-4 bg-white">
           <div className="flex items-center gap-3">
             {/* Desktop Toggle Icon */}
             <button
@@ -402,50 +396,29 @@ function AppLayout() {
           </div>
         </div>
 
-        {/* Floating AI Vercel Chatbot Modal Container */}
-        {/* Mobile: starts from top of page (top-2 h-[calc(100vh-5.5rem)]) */}
-        {/* Desktop: centered and resizable (desktop-resizable-modal) */}
-        {isAIModalOpen && (
-          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 top-2 inset-x-2 bottom-20 h-[calc(100vh-5.5rem)] md:top-auto md:bottom-20 md:left-1/2 md:-translate-x-1/2 md:inset-x-auto md:w-[840px] md:h-[650px] desktop-resizable-modal">
-            {/* Top Desktop Resize Handle Indicator */}
-            <div className="hidden md:flex items-center justify-center h-2 bg-slate-100/80 hover:bg-blue-100/80 cursor-ns-resize shrink-0 transition-colors">
-              <div className="w-10 h-1 bg-slate-300 rounded-full" />
-            </div>
+        {/* Shadcn Chat Modal */}
+        <ChatModal open={isAIModalOpen} onOpenChange={setIsAIModalOpen} />
 
-            <iframe
-              src="http://localhost:3001"
-              className="w-full flex-1 border-0 rounded-b-2xl"
-              title="entri Vercel AI Chatbot"
-            />
-          </div>
-        )}
 
         {/* Floating AI Agent Button with Soft Glow Effect */}
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
-          <button
-            type="button"
-            onClick={() => setIsAIModalOpen(!isAIModalOpen)}
-            className="liquid-water-glow-btn flex items-center gap-2.5 px-6 py-3 rounded-full text-white font-semibold text-sm transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 border border-white/20"
-          >
-            {isAIModalOpen ? (
-              <>
-                <X className="w-5 h-5 text-white stroke-[2.5]" />
-                <span className="text-white font-semibold text-sm tracking-wide">Close</span>
-              </>
-            ) : (
-              <>
-                <img
-                  src="/AI.jpeg"
-                  alt="AI Agent"
-                  className="w-7 h-7 rounded-full object-cover ring-2 ring-white/70 shadow-sm"
-                />
-                <span className="text-white font-semibold text-sm tracking-wide">
-                  Ask AI
-                </span>
-              </>
-            )}
-          </button>
-        </div>
+        {!isAIModalOpen && (
+          <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setIsAIModalOpen(true)}
+              className="liquid-water-glow-btn flex items-center gap-2.5 px-6 py-3 rounded-full text-white font-semibold text-sm transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 border border-white/20 shadow-lg"
+            >
+              <img
+                src="/AI.jpeg"
+                alt="AI Agent"
+                className="w-7 h-7 rounded-full object-cover ring-2 ring-white/70 shadow-sm"
+              />
+              <span className="text-white font-semibold text-sm tracking-wide">
+                Ask AI
+              </span>
+            </button>
+          </div>
+        )}
       </main>
     </div>
   )

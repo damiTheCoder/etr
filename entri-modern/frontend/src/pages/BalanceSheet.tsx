@@ -92,8 +92,8 @@ export default function BalanceSheet() {
       </div>
 
       {data ? (
-        <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
-          <CardHeader className="border-0 px-6 py-4 bg-transparent">
+        <Card className="border-none bg-slate-100/60 shadow-2xs rounded-2xl overflow-hidden p-0">
+          <CardHeader className="border-none px-6 py-4 bg-transparent">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">Statement of Financial Position (Balance Sheet)</CardTitle>
@@ -110,32 +110,32 @@ export default function BalanceSheet() {
             <div className="overflow-x-auto">
               <Table className="w-full">
                 <TableHeader>
-                  <TableRow className="border-b border-slate-200 bg-white">
+                  <TableRow className="border-b border-slate-200/40 bg-slate-200/30">
                     <TableHead className="w-[60%] pl-6 text-slate-900 font-bold">Account Name & Category</TableHead>
                     <TableHead className="text-right pr-6 text-slate-900 font-bold">Amount (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {/* ASSETS SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-white">
+                  <TableRow className="font-bold text-slate-900 border-b border-slate-200/40 bg-slate-200/40">
                     <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
                       1. ASSETS
                     </TableCell>
                   </TableRow>
                   {data.assets?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                    <TableRow key={a.name} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                       <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
                       <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.assets?.accounts || data.assets.accounts.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-white">
+                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-200/30 bg-transparent">
                         No asset accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-slate-200 font-bold border-t-2 border-b border-slate-300">
+                  <TableRow className="bg-slate-200/60 font-bold border-t border-b border-slate-200/50">
                     <TableCell className="pl-6 font-bold text-slate-900">Total Assets</TableCell>
                     <TableCell className="text-right pr-6 font-mono font-bold text-slate-900 text-base">
                       {formatCurrency(data.assets?.total)}
@@ -143,25 +143,25 @@ export default function BalanceSheet() {
                   </TableRow>
 
                   {/* LIABILITIES SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-white">
+                  <TableRow className="font-bold text-slate-900 border-b border-slate-200/40 bg-slate-200/40">
                     <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
                       2. LIABILITIES
                     </TableCell>
                   </TableRow>
                   {data.liabilities?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                    <TableRow key={a.name} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                       <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
                       <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.liabilities?.accounts || data.liabilities.accounts.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-white">
+                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-200/30 bg-transparent">
                         No liability accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-slate-200 font-bold border-t-2 border-b border-slate-300">
+                  <TableRow className="bg-slate-200/60 font-bold border-t border-b border-slate-200/50">
                     <TableCell className="pl-6 font-bold text-slate-900">Total Liabilities</TableCell>
                     <TableCell className="text-right pr-6 font-mono font-bold text-slate-900">
                       {formatCurrency(data.liabilities?.total)}
@@ -169,24 +169,24 @@ export default function BalanceSheet() {
                   </TableRow>
 
                   {/* EQUITY SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-white">
+                  <TableRow className="font-bold text-slate-900 border-b border-slate-200/40 bg-slate-200/40">
                     <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
                       3. EQUITY
                     </TableCell>
                   </TableRow>
                   {data.equity?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                    <TableRow key={a.name} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                       <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
                       <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
-                  <TableRow className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                  <TableRow className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                     <TableCell className="pl-10 font-semibold text-slate-800">Current Period Net Profit / (Loss)</TableCell>
                     <TableCell className={`text-right pr-6 font-mono font-semibold ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {formatCurrency(data.netProfit)}
                     </TableCell>
                   </TableRow>
-                  <TableRow className="bg-slate-200 font-bold border-t-2 border-b border-slate-300">
+                  <TableRow className="bg-slate-200/60 font-bold border-t border-b border-slate-200/50">
                     <TableCell className="pl-6 font-bold text-slate-900">Total Equity</TableCell>
                     <TableCell className="text-right pr-6 font-mono font-bold text-slate-900">
                       {formatCurrency(data.equity?.total)}
@@ -194,7 +194,7 @@ export default function BalanceSheet() {
                   </TableRow>
 
                   {/* GRAND TOTAL SECTION */}
-                  <TableRow className="bg-slate-200 font-bold border-t-2 border-slate-300 text-base">
+                  <TableRow className="bg-slate-200/80 font-bold border-t border-slate-300/60 text-base">
                     <TableCell className="pl-6 font-bold text-slate-900">TOTAL LIABILITIES & EQUITY</TableCell>
                     <TableCell className="text-right pr-6 font-mono font-bold text-slate-900 text-base">
                       {formatCurrency((data.liabilities?.total || 0) + (data.equity?.total || 0))}

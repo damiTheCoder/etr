@@ -2,9 +2,13 @@
   "name": "etr",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix entri-modern/frontend run dev"
+    "dev": "npm run start",
+    "frontend": "npm --prefix entri-modern/frontend run dev",
+    "backend": "PYTHONPATH=entri-modern ./entri-modern/venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload",
+    "start": "npx -y concurrently@9.1.0 \"npm run backend\" \"npm run frontend\""
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "tailwindcss-animate": "^1.0.7"
   }
 }

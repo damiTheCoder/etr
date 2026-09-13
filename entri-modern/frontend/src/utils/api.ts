@@ -78,9 +78,36 @@ export const api = {
   closePeriod: (period: string) => request<any>(`/reports/close-period`, { method: 'POST', body: JSON.stringify({ period }) }),
 
   // Single values (settings)
-  getSingleValue: (key: string) => request<string>(`/single-values/${encodeURIComponent(key)}`),
-  setSingleValue: (key: string, value: string) => request<void>(`/single-values/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    body: JSON.stringify({ value }),
-  }),
+  getSingleValue: async (key: string): Promise<string | null> => {
+    try {
+      const res = await request<{ key: string; value: any }>(`/single-values/${encodeURIComponent(key)}`)
+      if (res && typeof res === 'object' && 'value' in res) {
+        const val = res.value
+        if (typeof val === 'string' && (val === '[object Object]' || val.startsWith('{'))) {
+          try {
+            const parsed = JSON.parse(val)
+            if (parsed && typeof parsed === 'object' && 'value' in parsed) {
+              return String(parsed.value ?? '')
+            }
+          } catch {
+            return null
+          }
+        }
+        return String(val ?? '')
+      }
+      if (typeof res === 'string') {
+        return res
+      }
+      return null
+    } catch {
+      return null
+    }
+  },
+  setSingleValue: async (key: string, value: string): Promise<void> => {
+    const stringValue = typeof value === 'object' ? String((value as any)?.value ?? '') : String(value ?? '')
+    await request<void>(`/single-values/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      body: JSON.stringify({ value: stringValue }),
+    })
+  },
 }

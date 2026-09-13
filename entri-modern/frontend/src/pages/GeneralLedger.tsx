@@ -123,9 +123,9 @@ export default function GeneralLedger() {
         </CardContent>
       </Card>
 
-      {/* Main White Card Container */}
-      <Card className="border-0 bg-slate-50 shadow-sm rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-0 px-6 py-4 bg-transparent">
+      {/* Main Container */}
+      <Card className="border-none bg-slate-100/60 shadow-2xs rounded-2xl overflow-hidden p-0">
+        <CardHeader className="border-none px-6 py-4 bg-transparent">
           <CardTitle className="text-slate-900 font-bold">General Ledger Statement</CardTitle>
           <CardDescription className="text-slate-500 font-medium">
             {filterAccount !== 'all' ? `Filtered by ${filterAccount}` : 'All accounts'} • {entries.length} transactions recorded
@@ -136,7 +136,7 @@ export default function GeneralLedger() {
             <div className="overflow-x-auto">
               <Table className="w-full">
                 <TableHeader>
-                  <TableRow className="border-b border-slate-200 bg-white">
+                  <TableRow className="border-b border-slate-200/40 bg-slate-200/30">
                     <TableHead className="w-[100px] text-slate-900 font-bold">Date</TableHead>
                     <TableHead className="text-slate-900 font-bold">Account</TableHead>
                     <TableHead className="text-slate-900 font-bold">Party</TableHead>
@@ -148,7 +148,7 @@ export default function GeneralLedger() {
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry: any, i: number) => (
-                    <TableRow key={i} className="hover:bg-slate-50 border-b border-slate-100 bg-white">
+                    <TableRow key={i} className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
                       <TableCell className="text-sm text-slate-700">{entry.date}</TableCell>
                       <TableCell className="font-semibold text-slate-900">{entry.account}</TableCell>
                       <TableCell className="text-sm text-slate-700">{entry.party || '—'}</TableCell>
@@ -166,8 +166,8 @@ export default function GeneralLedger() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Totals Summary Row - Grey Background */}
-                  <TableRow className="bg-slate-200 text-slate-900 font-bold border-t-2 border-slate-300">
+                  {/* Totals Summary Row */}
+                  <TableRow className="bg-slate-200/80 text-slate-900 font-bold border-t border-slate-300/60">
                     <TableCell colSpan={4} className="font-bold text-slate-900">TOTAL</TableCell>
                     <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalDebit)}</TableCell>
                     <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalCredit)}</TableCell>
