@@ -1,10 +1,16 @@
 {
+  "version": 2,
   "buildCommand": "cd entri-modern/frontend && npm install && npm run build",
   "outputDirectory": "entri-modern/frontend/dist",
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
+

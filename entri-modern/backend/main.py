@@ -32,13 +32,25 @@ from backend.coa import build_coa_hierarchy, is_debit, is_credit, normal_balance
 from backend.api.ai_router import router as ai_router
 
 
+_initialized = False
+
+
+def ensure_initialized():
+    global _initialized
+    if not _initialized:
+        schemas_dir = os.environ.get(
+            "BOOKS_SCHEMAS_DIR",
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "schemas")
+        )
+        load_schemas(schemas_dir)
+        db.init_database()
+        _seed_defaults()
+        _initialized = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    schemas_dir = os.environ.get("BOOKS_SCHEMAS_DIR",
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "schemas"))
-    load_schemas(schemas_dir)
-    db.init_database()
-    _seed_defaults()
+    ensure_initialized()
     yield
 
 

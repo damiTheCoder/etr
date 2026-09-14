@@ -19,11 +19,36 @@ _thread_local = threading.local()
 
 def get_connection() -> sqlite3.Connection:
     if not hasattr(_thread_local, "connection") or _thread_local.connection is None:
-        db_path = DB_PATH or os.environ.get("BOOKS_DB_PATH", "books.db")
+        db_path = DB_PATH or os.environ.get("BOOKS_DB_PATH")
+        if not db_path:
+            if os.environ.get("VERCEL"):
+                db_path = "/tmp/books.db"
+                if not os.path.exists("/tmp/books.db"):
+                    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+                    candidates = [
+                        os.path.join(base_dir, "books.db"),
+                        os.path.join(base_dir, "entri-modern", "books.db")
+                    ]
+                    for cand in candidates:
+                        if os.path.exists(cand):
+                            try:
+                                import shutil
+                                shutil.copyfile(cand, "/tmp/books.db")
+                                break
+                            except Exception as e:
+                                print(f"Error copying seed DB to /tmp: {e}")
+            else:
+                db_path = "books.db"
         conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            pass
+        try:
+            conn.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            pass
         _thread_local.connection = conn
     return _thread_local.connection
 

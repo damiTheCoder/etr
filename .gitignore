@@ -52,3 +52,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# SQLite temp files
+*.db-shm
+*.db-wal
+
