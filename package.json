@@ -2,6 +2,7 @@
   "name": "etr",
   "private": true,
   "scripts": {
+    "build": "cd entri-modern/frontend && npm install && npm run build",
     "dev": "npm run start",
     "frontend": "npm --prefix entri-modern/frontend run dev",
     "backend": "PYTHONPATH=entri-modern ./entri-modern/venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload",
