@@ -15,7 +15,7 @@ from datetime import date
 from backend.core.base_model import BaseModel
 from backend.core.schema_engine import Doc, LedgerPosting
 from backend.core import database as db
-from .invoice import _save_ledger_entry, _reverse_ledger_entry
+from .invoice import safe_float, _save_ledger_entry, _reverse_ledger_entry
 
 
 class PaymentModel(BaseModel):
@@ -32,7 +32,7 @@ class PaymentModel(BaseModel):
     async def after_submit(self, doc: Doc):
         """Post payment ledger entries (double-entry)."""
         from backend.coa import resolve_account_name
-        amount = float(doc.get("amount", 0))
+        amount = safe_float(doc.get("amount"), 0)
         is_receive = doc.get("paymentType") == "Receive"
         account = resolve_account_name(doc.get("account", "Cash"))
         party = doc.get("party", "")
@@ -65,7 +65,7 @@ class PaymentModel(BaseModel):
         if ref_type and ref_name:
             inv = db.get_doc(ref_type, ref_name)
             if inv:
-                outstanding = float(inv.get("outstandingAmount", 0)) - amount
+                outstanding = safe_float(inv.get("outstandingAmount"), 0) - amount
                 inv._data["outstandingAmount"] = max(0, outstanding)
                 db.update_doc(inv)
 
@@ -83,14 +83,15 @@ class PaymentModel(BaseModel):
         # Restore outstanding amount on referenced invoice
         ref_type = doc.get("referenceType")
         ref_name = doc.get("referenceName")
-        amount = float(doc.get("amount", 0))
+        amount = safe_float(doc.get("amount"), 0)
         if ref_type and ref_name:
             inv = db.get_doc(ref_type, ref_name)
             if inv:
-                outstanding = float(inv.get("outstandingAmount", 0)) + amount
+                outstanding = safe_float(inv.get("outstandingAmount"), 0) + amount
                 inv._data["outstandingAmount"] = outstanding
                 db.update_doc(inv)
 
         doc._data["submitted"] = False
         doc._data["cancelled"] = True
         db.update_doc(doc)
+

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, ChevronDown } from 'lucide-react'
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -20,9 +20,10 @@ import { BrandBanner } from '@/components/dashboard/brand-banner'
 interface ChartPoint {
   label: string
   value: number
+  target: number
 }
 
-type Period = 'day' | 'month' | 'year'
+type Period = 'month' | 'year'
 
 // Raw data stored for recomputation on period change
 interface RawData {
@@ -31,7 +32,7 @@ interface RawData {
   entries: any[]
 }
 
-// Period selector dropdown component
+// Period selector dropdown component (Month & Year)
 function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -44,7 +45,7 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const labels: Record<Period, string> = { day: 'Day', month: 'Month', year: 'Year' }
+  const labels: Record<Period, string> = { month: 'Month', year: 'Year' }
 
   return (
     <div className="relative" ref={ref}>
@@ -56,7 +57,7 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[90px]">
-          {(['day', 'month', 'year'] as Period[]).map((p) => (
+          {(['month', 'year'] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => { onChange(p); setOpen(false) }}
@@ -73,137 +74,157 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
   )
 }
 
-// Build chart data for a given metric from raw data
+// Helper to extract item date string safely
+const getItemDate = (item: any) => String(item?.date || item?.posting_date || item?.postingDate || '')
+
+// Helper to check if an account is a Cash or Bank account
+const isCashAccount = (accountName: string) => {
+  if (!accountName) return false
+  const lower = String(accountName).toLowerCase()
+  return lower.includes('bank') || lower.includes('cash') || lower.includes('petty')
+}
+
+// Build chart data for a given metric across all historical dates
 function buildChartData(
   rawData: RawData,
   metric: 'cash' | 'revenue' | 'expenses' | 'profit' | 'ar' | 'ap',
   period: Period
 ): ChartPoint[] {
-  const { sales, purchases, entries } = rawData
+  const sales = Array.isArray(rawData?.sales) ? rawData.sales : []
+  const purchases = Array.isArray(rawData?.purchases) ? rawData.purchases : []
+  const entries = Array.isArray(rawData?.entries) ? rawData.entries : []
+  const isSubmitted = (item: any) => Boolean(item && (item.submitted === 1 || item.submitted === true || item.docstatus === 1) && !item.cancelled)
+
   const now = new Date()
+  const dates: string[] = []
+
+  for (const s of sales) if (getItemDate(s)) dates.push(getItemDate(s))
+  for (const p of purchases) if (getItemDate(p)) dates.push(getItemDate(p))
+  for (const e of entries) if (getItemDate(e)) dates.push(getItemDate(e))
+
+  dates.sort()
+
   const points: ChartPoint[] = []
 
-  const isSubmitted = (item: any) => Boolean(item.submitted && item.submitted !== 0 && !item.cancelled)
+  if (period === 'month') {
+    let startYear = now.getFullYear()
+    let startMonth = now.getMonth()
 
-  if (period === 'day') {
-    // Last 30 days
-    let running = 0
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-      const dateStr = d.toISOString().slice(0, 10) // YYYY-MM-DD
-      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-      const dayEntries = entries.filter((e: any) => e.date === dateStr)
-      const daySales = sales.filter((s: any) => s.date === dateStr)
-      const dayPurchases = purchases.filter((p: any) => p.date === dateStr)
-
-      let val = 0
-      if (metric === 'cash') {
-        for (const e of dayEntries) {
-          if (['Bank Account', 'Cash', 'Bank', 'Petty Cash'].includes(e.account)) {
-            val += Number(e.debit || 0) - Number(e.credit || 0)
-          }
-        }
-      } else if (metric === 'revenue') {
-        val = daySales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-      } else if (metric === 'expenses') {
-        val = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-      } else if (metric === 'profit') {
-        const r = daySales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        const e = dayPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-        val = r - e
-      } else if (metric === 'ar') {
-        val = daySales
-          .filter(isSubmitted)
-          .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
-      } else if (metric === 'ap') {
-        val = dayPurchases
-          .filter(isSubmitted)
-          .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
+    if (dates.length > 0) {
+      const earliest = dates[0].slice(0, 7)
+      const [ey, em] = earliest.split('-').map(Number)
+      if (ey && em) {
+        startYear = ey
+        startMonth = em - 1
       }
-
-      running += val
-      points.push({ label, value: running })
     }
-  } else if (period === 'month') {
-    // Last 6 months
-    let running = 0
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const yearMonthStr = monthDate.toISOString().slice(0, 7)
-      const label = monthDate.toLocaleDateString('en-US', { month: 'short' })
 
-      const monthEntries = entries.filter((e: any) => e.date && e.date.startsWith(yearMonthStr))
-      const monthSales = sales.filter((s: any) => s.date && s.date.startsWith(yearMonthStr))
-      const monthPurchases = purchases.filter((p: any) => p.date && p.date.startsWith(yearMonthStr))
+    // Generate 12 consecutive months starting from the month of the first transaction
+    for (let step = 0; step < 12; step++) {
+      const monthObj = new Date(startYear, startMonth + step, 1)
+      const dateStrFilter = monthObj.toISOString().slice(0, 7)
+      const label = monthObj.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
 
       let val = 0
+      let targetVal = 0
+
       if (metric === 'cash') {
-        for (const e of monthEntries) {
-          if (['Bank Account', 'Cash', 'Bank', 'Petty Cash'].includes(e.account)) {
-            val += Number(e.debit || 0) - Number(e.credit || 0)
+        const periodEntries = entries.filter((e: any) => e && getItemDate(e).startsWith(dateStrFilter))
+        for (const e of periodEntries) {
+          if (isCashAccount(e.account)) {
+            val += Number(e.debit || 0)
+            targetVal += Number(e.credit || 0)
           }
         }
       } else if (metric === 'revenue') {
-        val = monthSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
+        for (const s of periodSales) {
+          const grand = Number(s.grandTotal || s.baseGrandTotal || 0)
+          const outstanding = Number(s.outstandingAmount || 0)
+          val += grand
+          targetVal += Math.max(0, grand - outstanding)
+        }
       } else if (metric === 'expenses') {
-        val = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+        for (const p of periodPurchases) {
+          const grand = Number(p.grandTotal || p.baseGrandTotal || 0)
+          const outstanding = Number(p.outstandingAmount || 0)
+          val += grand
+          targetVal += Math.max(0, grand - outstanding)
+        }
       } else if (metric === 'profit') {
-        const r = monthSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        const e = monthPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-        val = r - e
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
       } else if (metric === 'ar') {
-        val = monthSales
-          .filter(isSubmitted)
-          .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter)).filter(isSubmitted)
+        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        targetVal = periodSales.reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
       } else if (metric === 'ap') {
-        val = monthPurchases
-          .filter(isSubmitted)
-          .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter)).filter(isSubmitted)
+        val = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
+        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
       }
 
-      running += val
-      points.push({ label, value: running })
+      points.push({ label, value: Math.round(val), target: Math.round(targetVal) })
     }
   } else {
-    // Last 5 years
-    let running = 0
-    for (let i = 4; i >= 0; i--) {
-      const year = now.getFullYear() - i
-      const yearStr = String(year)
-      const label = yearStr
+    // Year view: start from year of first transaction, count 6 years forward
+    let startYear = now.getFullYear() - 5
+    if (dates.length > 0) {
+      const ey = Number(dates[0].slice(0, 4))
+      if (ey) startYear = ey
+    }
 
-      const yearEntries = entries.filter((e: any) => e.date && e.date.startsWith(yearStr))
-      const yearSales = sales.filter((s: any) => s.date && s.date.startsWith(yearStr))
-      const yearPurchases = purchases.filter((p: any) => p.date && p.date.startsWith(yearStr))
+    for (let step = 0; step < 6; step++) {
+      const y = startYear + step
+      const dateStrFilter = String(y)
+      const label = String(y)
 
       let val = 0
+      let targetVal = 0
+
       if (metric === 'cash') {
-        for (const e of yearEntries) {
-          if (['Bank Account', 'Cash', 'Bank', 'Petty Cash'].includes(e.account)) {
-            val += Number(e.debit || 0) - Number(e.credit || 0)
+        const periodEntries = entries.filter((e: any) => e && getItemDate(e).startsWith(dateStrFilter))
+        for (const e of periodEntries) {
+          if (isCashAccount(e.account)) {
+            val += Number(e.debit || 0)
+            targetVal += Number(e.credit || 0)
           }
         }
       } else if (metric === 'revenue') {
-        val = yearSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
+        for (const s of periodSales) {
+          const grand = Number(s.grandTotal || s.baseGrandTotal || 0)
+          const outstanding = Number(s.outstandingAmount || 0)
+          val += grand
+          targetVal += Math.max(0, grand - outstanding)
+        }
       } else if (metric === 'expenses') {
-        val = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+        for (const p of periodPurchases) {
+          const grand = Number(p.grandTotal || p.baseGrandTotal || 0)
+          const outstanding = Number(p.outstandingAmount || 0)
+          val += grand
+          targetVal += Math.max(0, grand - outstanding)
+        }
       } else if (metric === 'profit') {
-        const r = yearSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        const e = yearPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-        val = r - e
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
       } else if (metric === 'ar') {
-        val = yearSales
-          .filter(isSubmitted)
-          .reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
+        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter)).filter(isSubmitted)
+        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+        targetVal = periodSales.reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
       } else if (metric === 'ap') {
-        val = yearPurchases
-          .filter(isSubmitted)
-          .reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
+        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter)).filter(isSubmitted)
+        val = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
+        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
       }
 
-      running += val
-      points.push({ label, value: running })
+      points.push({ label, value: Math.round(val), target: Math.round(targetVal) })
     }
   }
 
@@ -220,8 +241,6 @@ export default function Dashboard() {
   const [recentSales, setRecentSales] = useState<any[]>([])
   const [recentEntries, setRecentEntries] = useState<any[]>([])
   const [bannerMetrics, setBannerMetrics] = useState<any>(undefined)
-
-  // Raw data for dynamic recomputation
   const [rawData, setRawData] = useState<RawData>({ sales: [], purchases: [], entries: [] })
 
   // Per-card period selection
@@ -268,69 +287,65 @@ export default function Dashboard() {
           api.getReport('trial-balance'),
         ])
 
-        setRecentSales((sales as any[]).slice(0, 5))
-        const revTotal = (sales as any[]).reduce((s, i) => s + Number(i.grandTotal || i.baseGrandTotal || 0), 0)
-        const expTotal = (purchases as any[]).reduce((s, i) => s + Number(i.grandTotal || i.baseGrandTotal || 0), 0)
+        const isSubmitted = (item: any) => Boolean(item && (item.submitted === 1 || item.submitted === true || item.docstatus === 1) && !item.cancelled)
+        const submittedSales = Array.isArray(sales) ? sales.filter(isSubmitted) : []
+        const submittedPurchases = Array.isArray(purchases) ? purchases.filter(isSubmitted) : []
+        const allEntries = Array.isArray(ledger)
+          ? ledger
+          : Array.isArray((ledger as any)?.entries)
+          ? (ledger as any).entries
+          : []
 
-        const finalRev = (pl as any)?.income?.total ?? revTotal
-        const finalExp = (pl as any)?.expenses?.total ?? expTotal
-        const finalProfit = (pl as any)?.netProfit ?? (finalRev - finalExp)
-
-        setTotalRevenue(finalRev)
-        setTotalExpenses(finalExp)
-        setNetProfit(finalProfit)
-
-        const isSubmitted = (inv: any) => Boolean(inv.submitted && inv.submitted !== 0 && !inv.cancelled)
-
-        // Accounts Receivable
-        const arTotal = (sales as any[])
-          .filter(isSubmitted)
-          .reduce((sum: number, inv: any) => sum + Number(inv.outstandingAmount || 0), 0)
-        setAccountsReceivable(arTotal)
-
-        // Accounts Payable
-        const apTotal = (purchases as any[])
-          .filter(isSubmitted)
-          .reduce((sum: number, inv: any) => sum + Number(inv.outstandingAmount || 0), 0)
-        setAccountsPayable(apTotal)
-
-        const entries = (ledger as any)?.entries || []
-        setRecentEntries(entries.slice(-10).reverse())
-
-        let cashSum = 0
-        let cashInflow = 0
-        let cashOutflow = 0
-
-        for (const e of entries) {
-          if (['Bank Account', 'Cash', 'Bank', 'Petty Cash'].includes(e.account)) {
-            const dr = Number(e.debit || 0)
-            const cr = Number(e.credit || 0)
-            cashInflow += dr
-            cashOutflow += cr
-            cashSum += (dr - cr)
-          }
-        }
-        setCashBalance(cashSum)
-
-        // Set financial metrics for BrandBanner
-        setBannerMetrics({
-          cashInflow,
-          cashOutflow,
-          cashNet: cashSum,
-          revenue: finalRev,
-          expenses: finalExp,
-          netProfit: finalProfit,
-          totalAssets: (bs as any)?.assets?.total ?? 0,
-          totalLiabilities: (bs as any)?.liabilities?.total ?? 0,
-          totalEquity: (bs as any)?.equity?.total ?? 0,
-          totalDebit: (tb as any)?.totalDebit ?? 0,
-          totalCredit: (tb as any)?.totalCredit ?? 0,
+        setRawData({
+          sales: submittedSales,
+          purchases: submittedPurchases,
+          entries: allEntries,
         })
 
-        // Store raw data for period-based recomputation
-        setRawData({ sales: sales as any[], purchases: purchases as any[], entries })
-      } catch (e) {
-        console.error('Dashboard load error:', e)
+        const rev = (pl as any)?.income?.total ?? submittedSales.reduce((acc: number, item: any) => acc + Number(item.grandTotal || item.baseGrandTotal || 0), 0)
+        const exp = (pl as any)?.expenses?.total ?? submittedPurchases.reduce((acc: number, item: any) => acc + Number(item.grandTotal || item.baseGrandTotal || 0), 0)
+        const ar = submittedSales.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
+        const ap = submittedPurchases.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
+
+        setTotalRevenue(rev)
+        setTotalExpenses(exp)
+        setAccountsReceivable(ar)
+        setAccountsPayable(ap)
+
+        const netInc = (pl as any)?.netProfit ?? (pl as any)?.net_profit ?? (rev - exp)
+        setNetProfit(netInc)
+
+        let cashVal = 0
+        if (bs?.totalCash !== undefined && bs?.totalCash !== null) {
+          cashVal = Number(bs.totalCash)
+        } else if (allEntries.length > 0) {
+          for (const entry of allEntries) {
+            if (isCashAccount(entry.account)) {
+              cashVal += Number(entry.debit || 0) - Number(entry.credit || 0)
+            }
+          }
+        } else if (tb?.rows && Array.isArray(tb.rows)) {
+          for (const row of tb.rows) {
+            if (row.account_type === 'Bank' || row.account_type === 'Cash' || isCashAccount(row.account)) {
+              cashVal += Number(row.debit || 0) - Number(row.credit || 0)
+            }
+          }
+        }
+        setCashBalance(cashVal)
+
+        setBannerMetrics({
+          cashBalance: cashVal,
+          totalRevenue: rev,
+          totalExpenses: exp,
+          netProfit: netInc,
+          accountsReceivable: ar,
+          accountsPayable: ap,
+        })
+
+        setRecentSales(submittedSales.slice(0, 5))
+        setRecentEntries(allEntries.slice(0, 10))
+      } catch (err) {
+        console.error('Error loading dashboard data:', err)
       }
     }
     loadData()
@@ -344,62 +359,99 @@ export default function Dashboard() {
   const arChartData = useMemo(() => buildChartData(rawData, 'ar', arPeriod), [rawData, arPeriod])
   const apChartData = useMemo(() => buildChartData(rawData, 'ap', apPeriod), [rawData, apPeriod])
 
-  function renderChart(data: ChartPoint[], color: string, gradientId: string) {
+  function renderChart(
+    data: ChartPoint[],
+    color: string,
+    valueLabel: string = 'Metric Total',
+    targetLabel: string = 'Settled Total'
+  ) {
+    const totalPoints = data.length
+    const widthPercentage = totalPoints > 6 ? (totalPoints / 6) * 100 : 100
+
+    // Compute max domain to ensure left fixed Y-Axis renders price levels matching right chart
+    const maxVal = Math.max(0, ...data.flatMap(d => [d.value || 0, d.target || 0]))
+    const upperDomain = maxVal > 0 ? Math.ceil(maxVal * 1.08) : 100
+    const domain: [number, number] = [0, upperDomain]
+
     return (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.25} />
-              <stop offset="95%" stopColor={color} stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis
-            dataKey="label"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }}
-            dy={8}
-            interval="preserveStartEnd"
-          />
-          <YAxis
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={formatYAxis}
-            tick={{ fill: '#94a3b8', fontSize: 11 }}
-            width={45}
-          />
-          <Tooltip
-            formatter={(value: number) => [formatCurrency(value), 'Amount']}
-            contentStyle={{
-              borderRadius: '12px',
-              border: 'none',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-              fontSize: '13px',
-              padding: '8px 14px',
-            }}
-          />
-          <Area
-            type="monotoneX"
-            dataKey="value"
-            stroke={color}
-            strokeWidth={2.5}
-            fill={`url(#${gradientId})`}
-            dot={false}
-            activeDot={{ r: 5, fill: color, strokeWidth: 2, stroke: '#fff' }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      <div className="flex w-full h-[180px] relative">
+        {/* Fixed Y-Axis Panel on Left */}
+        <div className="w-[45px] h-full flex-none z-10 bg-slate-50 flex items-center">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 5, right: 0, left: -4, bottom: 0 }}>
+              <YAxis
+                domain={domain}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={formatYAxis}
+                tick={{ fontFamily: "'Glacial Indifference', 'GlacialIndifference', sans-serif", fill: '#94a3b8', fontSize: 11 }}
+                width={45}
+              />
+              <Bar dataKey="value" fill="transparent" stroke="transparent" />
+              <Bar dataKey="target" fill="transparent" stroke="transparent" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Scrollable Chart Body (Bars & X-Axis) on Right */}
+        <div className="flex-1 h-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pb-1">
+          <div style={{ width: `${widthPercentage}%`, minWidth: '100%', height: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 0 }} barGap={3} barCategoryGap="22%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontFamily: "'Glacial Indifference', 'GlacialIndifference', sans-serif", fill: '#64748b', fontSize: 11, fontWeight: 500 }}
+                  dy={8}
+                  interval={0}
+                />
+                <YAxis domain={domain} hide width={0} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name === 'value' ? valueLabel : targetLabel
+                  ]}
+                  contentStyle={{
+                    fontFamily: "'Glacial Indifference', 'GlacialIndifference', sans-serif",
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                    fontSize: '13px',
+                    padding: '8px 14px',
+                  }}
+                />
+                {/* Main Colour Bar with Black Border */}
+                <Bar
+                  dataKey="value"
+                  fill={color}
+                  stroke="#000000"
+                  strokeWidth={1.5}
+                  radius={[4, 4, 0, 0]}
+                />
+                {/* Black Bar with White Border */}
+                <Bar
+                  dataKey="target"
+                  fill="#000000"
+                  stroke="#ffffff"
+                  strokeWidth={1.5}
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
       {/* Embedded Brand Integrations Banner */}
       <BrandBanner metrics={bannerMetrics} />
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Financial performance and active metrics</p>
@@ -423,7 +475,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Cash Balance</CardTitle>
               <PeriodSelector value={cashPeriod} onChange={setCashPeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Price in USD vs Date trajectory</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Inflows (debits) vs Outflows (credits)</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(cashBalance)}</div>
             <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
               Trending up by 8.4% this month <TrendingUp className="h-3.5 w-3.5" />
@@ -432,7 +484,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(cashChartData, '#2563eb', 'cashGrad')}
+              {renderChart(cashChartData, '#2563eb', 'Cash Inflow (Debit)', 'Cash Outflow (Credit)')}
             </div>
           </CardContent>
         </Card>
@@ -444,7 +496,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Revenue</CardTitle>
               <PeriodSelector value={revenuePeriod} onChange={setRevenuePeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Gross sales price in USD vs Date</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Gross sales invoiced vs Paid & collected</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalRevenue)}</div>
             <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
               Trending up by 14.2% this month <TrendingUp className="h-3.5 w-3.5" />
@@ -453,7 +505,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(revenueChartData, '#10b981', 'revGrad')}
+              {renderChart(revenueChartData, '#10b981', 'Gross Sales Invoiced', 'Paid & Collected Revenue')}
             </div>
           </CardContent>
         </Card>
@@ -465,7 +517,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Expenses</CardTitle>
               <PeriodSelector value={expensesPeriod} onChange={setExpensesPeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Operational cost in USD vs Date</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Gross purchase cost vs Settled & paid</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalExpenses)}</div>
             <div className="flex items-center gap-1.5 font-medium text-amber-600 text-xs pt-1">
               Controlled expense trajectory <TrendingDown className="h-3.5 w-3.5" />
@@ -474,7 +526,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(expensesChartData, '#f59e0b', 'expGrad')}
+              {renderChart(expensesChartData, '#f59e0b', 'Gross Operational Cost', 'Paid & Settled Expenses')}
             </div>
           </CardContent>
         </Card>
@@ -486,7 +538,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Net Profit</CardTitle>
               <PeriodSelector value={profitPeriod} onChange={setProfitPeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Net earnings in USD vs Date</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Period revenue vs Period expenses</CardDescription>
             <div className={`text-3xl font-semibold pt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {formatCurrency(netProfit)}
             </div>
@@ -498,7 +550,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(profitChartData, '#6366f1', 'profitGrad')}
+              {renderChart(profitChartData, '#6366f1', 'Revenue', 'Expenses')}
             </div>
           </CardContent>
         </Card>
@@ -510,7 +562,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Accounts Receivable</CardTitle>
               <PeriodSelector value={arPeriod} onChange={setArPeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Outstanding from sales invoices</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Total invoiced vs Outstanding receivables</CardDescription>
             <div className="text-3xl font-semibold text-sky-600 pt-1">{formatCurrency(accountsReceivable)}</div>
             <div className="flex items-center gap-1.5 font-medium text-sky-600 text-xs pt-1">
               {accountsReceivable > 0 ? 'Pending customer payments' : 'All receivables collected'}
@@ -520,7 +572,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(arChartData, '#0ea5e9', 'arGrad')}
+              {renderChart(arChartData, '#0ea5e9', 'Total Sales Invoiced', 'Outstanding Receivable')}
             </div>
           </CardContent>
         </Card>
@@ -532,7 +584,7 @@ export default function Dashboard() {
               <CardTitle className="text-base font-semibold text-slate-800">Accounts Payable</CardTitle>
               <PeriodSelector value={apPeriod} onChange={setApPeriod} />
             </div>
-            <CardDescription className="text-xs text-slate-500">Outstanding on purchase invoices</CardDescription>
+            <CardDescription className="text-xs text-slate-500">Total invoiced vs Outstanding payables</CardDescription>
             <div className="text-3xl font-semibold text-rose-600 pt-1">{formatCurrency(accountsPayable)}</div>
             <div className="flex items-center gap-1.5 font-medium text-rose-600 text-xs pt-1">
               {accountsPayable > 0 ? 'Pending vendor payments' : 'All payables settled'}
@@ -542,7 +594,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
-              {renderChart(apChartData, '#e11d48', 'apGrad')}
+              {renderChart(apChartData, '#e11d48', 'Total Purchases Invoiced', 'Outstanding Payable')}
             </div>
           </CardContent>
         </Card>

@@ -85,7 +85,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
             </button>
 
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 shadow-2xs text-[11px] font-medium text-slate-800 hover:bg-white transition-colors cursor-pointer select-none">
-              <AnthropicLogo className="w-3 h-3 text-slate-900" />
+              <img src="/logo.png" alt="entri logo" className="w-3.5 h-3.5 rounded-full object-cover filter grayscale contrast-200" />
               <span>entri-ai-2.0</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </div>

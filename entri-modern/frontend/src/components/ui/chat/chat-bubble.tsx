@@ -40,12 +40,16 @@ const ChatBubbleAvatar = React.forwardRef<HTMLDivElement, ChatBubbleAvatarProps>
       <div
         ref={ref}
         className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs mt-0.5",
+          "flex size-7 shrink-0 items-center justify-center rounded-full overflow-hidden border border-slate-200/80 shadow-2xs mt-0.5 bg-transparent",
           className
         )}
         {...props}
       >
-        <AnthropicLogo className="h-3.5 w-3.5" />
+        <img
+          src="/logo.png"
+          alt="AI Reply Logo"
+          className="size-full rounded-full object-cover filter grayscale contrast-200"
+        />
       </div>
     )
   }

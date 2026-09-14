@@ -5,6 +5,7 @@ Handles SQLite operations with schema-driven table creation.
 import sqlite3
 import json
 import os
+import threading
 from datetime import date, datetime
 from typing import Any, Optional
 from uuid import uuid4
@@ -13,26 +14,27 @@ from .schema_engine import get_schema, get_all_schemas, SchemaDef, Doc
 
 
 DB_PATH = None
-_connection: Optional[sqlite3.Connection] = None
+_thread_local = threading.local()
 
 
 def get_connection() -> sqlite3.Connection:
-    global _connection
-    if _connection is None:
+    if not hasattr(_thread_local, "connection") or _thread_local.connection is None:
         db_path = DB_PATH or os.environ.get("BOOKS_DB_PATH", "books.db")
-        _connection = sqlite3.connect(db_path, check_same_thread=False)
-        _connection.row_factory = sqlite3.Row
-        _connection.execute("PRAGMA journal_mode=WAL")
-        _connection.execute("PRAGMA foreign_keys=ON")
-    return _connection
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        _thread_local.connection = conn
+    return _thread_local.connection
 
 
 def init_database(db_path: Optional[str] = None):
     """Create database and initialize all tables from schemas."""
-    global DB_PATH, _connection
+    global DB_PATH
     if db_path:
         DB_PATH = db_path
-    _connection = None
+    if hasattr(_thread_local, "connection"):
+        _thread_local.connection = None
     conn = get_connection()
 
     for schema_name, schema in get_all_schemas().items():
@@ -45,6 +47,18 @@ def init_database(db_path: Optional[str] = None):
         CREATE TABLE IF NOT EXISTS SingleValue (
             name TEXT PRIMARY KEY,
             value TEXT
+        )
+    """)
+
+    # Audit Log table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS AuditLog (
+            id TEXT PRIMARY KEY,
+            reference_type TEXT NOT NULL,
+            reference_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            details TEXT DEFAULT '',
+            timestamp TEXT NOT NULL
         )
     """)
 
@@ -192,10 +206,11 @@ def _load_child_rows(conn, parent_name: str, parent_type: str) -> dict:
 
     result = {}
     for row in rows:
-        fieldname = row['fieldname']
+        fieldname = row[0] if isinstance(row, (tuple, list)) else row['fieldname']
+        data_val = row[1] if isinstance(row, (tuple, list)) else row['data']
         if fieldname not in result:
             result[fieldname] = []
-        result[fieldname].append(json.loads(row['data']))
+        result[fieldname].append(json.loads(data_val))
     return result
 
 
@@ -397,3 +412,43 @@ def get_ledger_entries(
 
     rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def add_audit_log(ref_type: str, ref_name: str, action: str, details: str = ""):
+    """Record an audit trail event for a document."""
+    try:
+        conn = get_connection()
+        import uuid
+        log_id = str(uuid.uuid4())[:8]
+        ts = datetime.now().isoformat(timespec="seconds")
+        conn.execute(
+            "INSERT INTO AuditLog (id, reference_type, reference_name, action, details, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            (log_id, ref_type, ref_name, action, details or "", ts)
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Error adding audit log: {e}")
+
+
+def get_audit_logs(ref_type: str, ref_name: str) -> list:
+    """Retrieve audit trail events for a document."""
+    try:
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT id, reference_type, reference_name, action, details, timestamp FROM AuditLog WHERE reference_type = ? AND reference_name = ? ORDER BY timestamp DESC",
+            (ref_type, ref_name)
+        ).fetchall()
+        return [
+            {
+                "id": r[0] if isinstance(r, (tuple, list)) else r["id"],
+                "reference_type": r[1] if isinstance(r, (tuple, list)) else r["reference_type"],
+                "reference_name": r[2] if isinstance(r, (tuple, list)) else r["reference_name"],
+                "action": r[3] if isinstance(r, (tuple, list)) else r["action"],
+                "details": r[4] if isinstance(r, (tuple, list)) else r["details"],
+                "timestamp": r[5] if isinstance(r, (tuple, list)) else r["timestamp"]
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print(f"Error reading audit logs: {e}")
+        return []

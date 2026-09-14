@@ -59,6 +59,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --font-sans: 'Glacial Indifference', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Glacial Indifference', sans-serif;
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -123,7 +125,7 @@
 }
 
 body {
-  font-family: var(--font-geist), 'Glacial Indifference', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Glacial Indifference', var(--font-geist), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .dark {
@@ -404,9 +406,7 @@ textarea:focus-visible {
 }
 
 .cm-editor {
-  font-family:
-    "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", ui-monospace,
-    monospace !important;
+  font-family: 'Glacial Indifference', sans-serif !important;
   @apply bg-transparent! outline-hidden! text-[13px]! leading-[1.6]!;
 }
 
@@ -515,6 +515,12 @@ textarea:focus-visible {
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
+}
+
+.font-mono,
+.font-sans,
+.font-serif {
+  font-family: 'Glacial Indifference', sans-serif !important;
 }
 
 [data-testid="artifact"] {

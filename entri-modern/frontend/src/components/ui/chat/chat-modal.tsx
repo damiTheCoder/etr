@@ -10,7 +10,7 @@ export interface ChatModalProps {
 export const ChatModal: React.FC<ChatModalProps> = ({ open, onOpenChange }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl w-[95vw] h-[86vh] max-h-[820px] p-0 gap-0 overflow-hidden bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xl rounded-2xl flex flex-col">
+      <DialogContent className="sm:max-w-4xl w-[96vw] sm:w-[95vw] h-[95vh] h-[95dvh] sm:h-[86vh] max-h-[96vh] sm:max-h-[820px] p-0 gap-0 overflow-hidden bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xl rounded-2xl flex flex-col">
         <DialogHeader className="sr-only">
           <DialogTitle>entri AI Assistant</DialogTitle>
           <DialogDescription>AI Financial Assistant & Accounting Automation Chat</DialogDescription>

@@ -48,9 +48,13 @@ export const AiChatEmptyState: React.FC<AiChatEmptyStateProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         initial={{ opacity: 0, scale: 0.9 }}
         transition={{ delay: 0.2, duration: 0.4, ease: easeSpring }}
-        className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-md ring-1 ring-slate-800"
+        className="mb-4 flex size-12 items-center justify-center rounded-full overflow-hidden shadow-md ring-1 ring-slate-200 bg-transparent p-0.5"
       >
-        <AnthropicLogo className="size-6" />
+        <img
+          src="/logo.png"
+          alt="entri AI"
+          className="size-full rounded-full object-cover filter grayscale contrast-200"
+        />
       </motion.div>
 
       <motion.h2

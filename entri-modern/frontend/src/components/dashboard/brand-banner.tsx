@@ -32,8 +32,7 @@ export const brandList: BrandItem[] = [
     name: 'Risevest',
     subtitle: 'Dollar Investments',
     yieldRate: '12.00% p.a.',
-    color: 'bg-[#008080]',
-    initials: 'R',
+    image: '/rice.png',
   },
   {
     id: 'bamboo',
@@ -55,8 +54,7 @@ export const brandList: BrandItem[] = [
     name: 'FairMoney',
     subtitle: 'Quick Loans',
     yieldRate: 'Instant Access',
-    color: 'bg-[#00a859]',
-    initials: 'FM',
+    image: '/fairmoney.png',
   },
 ]
 
@@ -177,9 +175,9 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
   }
 
   return (
-    <div className="space-y-4 bg-transparent mb-2">
+    <div className="space-y-6 bg-transparent mb-6">
       {/* Top Bar: Inflow / Statement Header & Controls */}
-      <div className="flex items-center justify-between relative">
+      <div className="flex items-center justify-between relative mb-6 pb-2">
         <div className="space-y-1">
           {/* Dynamic Label */}
           <div className="flex items-center gap-2">
@@ -197,7 +195,7 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
             <button
               type="button"
               onClick={() => setFilterOpen(!filterOpen)}
-              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-slate-700 bg-white shadow-2xs hover:bg-slate-100 rounded-full transition-colors cursor-pointer border border-slate-200 select-none"
+              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors cursor-pointer border-none select-none"
               title="Change financial statement view"
             >
               <span>/mo</span>
@@ -233,7 +231,7 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
         {filterOpen && (
           <div
             ref={popoverRef}
-            className="absolute left-0 top-14 z-50 w-80 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+            className="absolute left-0 top-14 z-50 w-80 rounded-2xl border-none bg-slate-100 p-4 shadow-xl animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
           >
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-slate-700">Select statement & month</span>
@@ -256,7 +254,7 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
                   className={`shrink-0 snap-start px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border-none ${
                     selectedCategory === cat
                       ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      : 'bg-slate-200/70 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   {cat}
@@ -270,13 +268,13 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
                 type="text"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full rounded-xl bg-slate-100 px-3 py-2 text-xs font-medium text-slate-900 border border-slate-200 outline-none pr-8"
+                className="w-full rounded-xl bg-slate-200/60 px-3 py-2 text-xs font-medium text-slate-900 border-none outline-none pr-8"
               />
               <Calendar className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200/50">
               <button
                 type="button"
                 onClick={() => setSelectedMonth('September 2026')}
@@ -318,6 +316,14 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
                     src={brand.image}
                     alt={brand.name}
                     className="w-full h-full object-cover rounded-full"
+                    onError={(e) => {
+                      const target = e.currentTarget
+                      if (target.src.includes('fairmoney.png')) {
+                        target.src = '/fairmoney.svg'
+                      } else if (target.src.includes('rice.png')) {
+                        target.src = '/Risevest.png'
+                      }
+                    }}
                   />
                 ) : (
                   <div className={`w-full h-full ${brand.color || 'bg-blue-600'} text-white flex items-center justify-center font-bold text-base rounded-full`}>

@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from backend.core.schema_engine import load_schemas, get_all_schemas, get_schema, Doc
 from backend.core import database as db
 from backend.models import get_model, get_all_models
+from backend.models.invoice import safe_float
 from backend.coa import build_coa_hierarchy, is_debit, is_credit, normal_balance_side
 
 
@@ -352,8 +353,8 @@ def general_ledger(
     # Add running balance
     running = 0.0
     for entry in result:
-        debit = float(entry.get("debit", 0))
-        credit = float(entry.get("credit", 0))
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
         acct = entry.get("account", "")
         rt = _get_root_type(acct)
         if rt and is_debit(rt):
@@ -533,8 +534,8 @@ async def create_doc_route(schema_name: str, request: Request):
             for line in entries:
                 if isinstance(line, dict):
                     acct_name = resolve_account_name(line.get("account") or line.get("account_name") or "")
-                    debit = float(line.get("debit", 0))
-                    credit = float(line.get("credit", 0))
+                    debit = safe_float(line.get("debit"), 0)
+                    credit = safe_float(line.get("credit"), 0)
                     if acct_name:
                         normalized_lines.append({
                             "account": acct_name,
@@ -546,12 +547,20 @@ async def create_doc_route(schema_name: str, request: Request):
 
     doc = model.create(payload)
     await model.before_sync(doc)
-    model.save(doc)
+    try:
+        model.save(doc)
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(400, f"An account or document named '{payload.get('name')}' already exists.")
+        raise HTTPException(400, str(e))
+
+    db.add_audit_log(target_schema, doc.get("name"), "Created", f"Created {target_schema} entry")
 
     # Auto-submit submittable transaction documents so debits/credits post to ledger immediately
     if target_schema in ["JournalEntry", "SalesInvoice", "PurchaseInvoice", "Payment", "PurchaseOrder"]:
         try:
             await model.after_submit(doc)
+            db.add_audit_log(target_schema, doc.get("name"), "Posted", "Auto-posted entries to double-entry ledger")
         except Exception as e:
             print(f"Auto-submit ledger error for {target_schema}: {e}")
             raise HTTPException(status_code=400, detail=f"Transaction submission failed: {str(e)}")
@@ -572,6 +581,7 @@ async def update_doc_route(schema_name: str, name: str, body: DocCreate):
         doc._data[key] = value
     await model.before_sync(doc)
     model.save(doc)
+    db.add_audit_log(schema_name, name, "Edited", "Updated entry details and accounting lines")
     return doc.to_dict()
 
 
@@ -585,6 +595,7 @@ async def delete_doc_route(schema_name: str, name: str):
         raise HTTPException(404, f"Document '{name}' not found")
     await model.after_delete(doc)
     model.delete(name)
+    db.add_audit_log(schema_name, name, "Deleted", "Deleted document")
     return {"status": "deleted"}
 
 
@@ -600,6 +611,7 @@ async def submit_doc(schema_name: str, name: str):
     await model.before_sync(doc)
     model.save(doc)
     await model.after_submit(doc)
+    db.add_audit_log(schema_name, name, "Posted", "Posted accounting entries to double-entry ledger")
     return doc.to_dict()
 
 
@@ -613,7 +625,41 @@ async def cancel_doc(schema_name: str, name: str):
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
     await model.after_cancel(doc)
+    db.add_audit_log(schema_name, name, "Cancelled", "Cancelled document and reversed ledger entries")
     return doc.to_dict()
+
+
+# Reset document to draft status and revert ledger entries
+@app.post("/api/{schema_name}/{name}/reset-to-draft")
+async def reset_to_draft(schema_name: str, name: str):
+    model = get_model(schema_name)
+    if not model:
+        raise HTTPException(404, f"Model '{schema_name}' not found")
+    doc = model.get(name)
+    if not doc:
+        raise HTTPException(404, f"Document '{name}' not found")
+
+    if doc.get("submitted"):
+        await model.after_cancel(doc)
+
+    doc._data["submitted"] = False
+    doc._data["cancelled"] = False
+    db.update_doc(doc)
+
+    conn = db.get_connection()
+    conn.execute(
+        "DELETE FROM AccountingLedgerEntry WHERE reference_type = ? AND reference_name = ?",
+        (schema_name, name)
+    )
+    conn.commit()
+
+    db.add_audit_log(schema_name, name, "Reset to Draft", "Reverted ledger postings and unlocked entry for editing")
+    return doc.to_dict()
+
+
+@app.get("/api/{schema_name}/{name}/audit-logs")
+def get_doc_audit_logs(schema_name: str, name: str):
+    return db.get_audit_logs(schema_name, name)
 
 
 # Mark Paid / Mark Unpaid
@@ -634,7 +680,7 @@ async def mark_invoice_paid(schema_name: str, name: str):
         await model.after_submit(doc)
         doc = model.get(name)
 
-    outstanding = float(doc.get("outstandingAmount", 0))
+    outstanding = safe_float(doc.get("outstandingAmount"), 0)
     if outstanding <= 0:
         return doc.to_dict()
 
@@ -675,7 +721,7 @@ async def mark_invoice_unpaid(schema_name: str, name: str):
         if p.get("submitted") and not p.get("cancelled"):
             await pay_model.after_cancel(p)
 
-    doc._data["outstandingAmount"] = float(doc.get("grandTotal", 0))
+    doc._data["outstandingAmount"] = safe_float(doc.get("grandTotal"), 0)
     db.update_doc(doc)
 
     return doc.to_dict()
@@ -704,8 +750,8 @@ def _get_ledger_summaries(from_date: Optional[str] = None, to_date: Optional[str
         if to_date and entry_date > to_date:
             continue
 
-        debit = float(entry.get("debit", 0))
-        credit = float(entry.get("credit", 0))
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
 
         if acct not in summaries:
             summaries[acct] = {"debit": 0.0, "credit": 0.0}
@@ -774,8 +820,8 @@ def ar_aging():
     periods = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
     
     for entry in debtors_entries:
-        debit = float(entry.get("debit", 0))
-        credit = float(entry.get("credit", 0))
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
         amount = debit - credit
         
         if amount == 0:
@@ -819,8 +865,8 @@ def ap_aging():
     periods = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
     
     for entry in creditors_entries:
-        debit = float(entry.get("debit", 0))
-        credit = float(entry.get("credit", 0))
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
         amount = credit - debit
         
         if amount == 0:
@@ -867,8 +913,8 @@ def tax_summary():
         if entry.get("reverted"):
             continue
             
-        debit = float(entry.get("debit", 0))
-        credit = float(entry.get("credit", 0))
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
         
         if account not in tax_accounts:
             tax_accounts[account] = {"debit": 0.0, "credit": 0.0, "balance": 0.0}

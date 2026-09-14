@@ -18,7 +18,7 @@ from datetime import date
 from backend.core.base_model import BaseModel
 from backend.core.schema_engine import Doc, LedgerPosting
 from backend.core import database as db
-from .invoice import _save_ledger_entry, _reverse_ledger_entry
+from .invoice import safe_float, _save_ledger_entry, _reverse_ledger_entry
 
 
 class JournalEntryModel(BaseModel):
@@ -48,8 +48,8 @@ class JournalEntryModel(BaseModel):
         for line in accounts:
             if isinstance(line, dict):
                 acct = resolve_account_name(line.get("account", ""))
-                debit = abs(float(line.get("debit", 0)))
-                credit = abs(float(line.get("credit", 0)))
+                debit = abs(safe_float(line.get("debit"), 0))
+                credit = abs(safe_float(line.get("credit"), 0))
                 party = line.get("party", "")
                 normalized.append({
                     "account": acct,
@@ -86,8 +86,8 @@ class JournalEntryModel(BaseModel):
 
         for line in doc.get("accounts", []):
             if isinstance(line, dict):
-                debit = float(line.get("debit", 0))
-                credit = float(line.get("credit", 0))
+                debit = safe_float(line.get("debit"), 0)
+                credit = safe_float(line.get("credit"), 0)
                 account = resolve_account_name(line.get("account", ""))
                 party = line.get("party", "")
 
@@ -122,3 +122,4 @@ class JournalEntryModel(BaseModel):
         doc._data["submitted"] = False
         doc._data["cancelled"] = True
         db.update_doc(doc)
+

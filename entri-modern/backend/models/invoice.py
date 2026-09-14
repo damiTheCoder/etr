@@ -25,6 +25,15 @@ from backend.core.schema_engine import Doc, LedgerPosting
 from backend.core import database as db
 
 
+def safe_float(val: Any, default: float = 0.0) -> float:
+    if val is None or val == "":
+        return float(default)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return float(default)
+
+
 class InvoiceModel(BaseModel):
     schema_name = "Invoice"
 
@@ -71,26 +80,26 @@ class InvoiceModel(BaseModel):
                     if not existing_item:
                         new_item = Doc("Item", {
                             "name": item_name,
-                            "rate": float(item.get("rate", 0)),
+                            "rate": safe_float(item.get("rate"), 0),
                             "incomeAccount": "Sales",
                             "expenseAccount": "Cost of Goods Sold",
                         })
                         new_item._not_inserted = True
                         db.insert_doc(new_item)
 
-                qty = float(item.get("quantity", 1))
-                rate = float(item.get("rate", 0))
+                qty = safe_float(item.get("quantity"), 1)
+                rate = safe_float(item.get("rate"), 0)
                 amount = qty * rate
                 item["amount"] = amount
-                base_amount = amount * float(doc.get("exchangeRate", 1))
+                base_amount = amount * safe_float(doc.get("exchangeRate"), 1)
                 item["baseAmount"] = base_amount
                 net_total += amount
 
         doc._data["netTotal"] = net_total
 
         # Apply discount
-        discount = float(doc.get("discountAmount", 0))
-        discount_pct = float(doc.get("discountPercent", 0))
+        discount = safe_float(doc.get("discountAmount"), 0)
+        discount_pct = safe_float(doc.get("discountPercent"), 0)
         if discount_pct > 0 and net_total > 0:
             discount = net_total * (discount_pct / 100)
             doc._data["discountAmount"] = discount
@@ -103,7 +112,7 @@ class InvoiceModel(BaseModel):
         if taxes_data:
             for tax_row in taxes_data:
                 if isinstance(tax_row, dict):
-                    tax_rate = float(tax_row.get("rate", 0))
+                    tax_rate = safe_float(tax_row.get("rate"), 0)
                     tax_amount = discounted_total * (tax_rate / 100)
                     tax_row["amount"] = tax_amount
                     tax_total += tax_amount
@@ -112,7 +121,7 @@ class InvoiceModel(BaseModel):
         grand_total = discounted_total + tax_total
         doc._data["grandTotal"] = grand_total
 
-        exchange_rate = float(doc.get("exchangeRate", 1))
+        exchange_rate = safe_float(doc.get("exchangeRate"), 1)
         doc._data["baseGrandTotal"] = grand_total * exchange_rate
 
         if not doc.get("submitted"):
@@ -123,16 +132,16 @@ class InvoiceModel(BaseModel):
         posting = LedgerPosting(doc)
 
         is_sales = doc.schema_name == "SalesInvoice"
-        exchange_rate = float(doc.get("exchangeRate", 1))
-        base_grand_total = float(doc.get("baseGrandTotal", 0))
+        exchange_rate = safe_float(doc.get("exchangeRate"), 1)
+        base_grand_total = safe_float(doc.get("baseGrandTotal"), 0)
 
         if is_sales:
             # Debit Debtors (Receivable) — Asset increases
             posting.debit("Debtors", base_grand_total)
 
             # Credit Sales (Income) for each item — Income increases
-            net_total = float(doc.get("netTotal", 0)) * exchange_rate
-            discount = float(doc.get("discountAmount", 0)) * exchange_rate
+            net_total = safe_float(doc.get("netTotal"), 0) * exchange_rate
+            discount = safe_float(doc.get("discountAmount"), 0) * exchange_rate
             discounted_total = net_total - discount
 
             items_data = doc.get("items", [])
@@ -140,14 +149,16 @@ class InvoiceModel(BaseModel):
                 for item in items_data:
                     if isinstance(item, dict):
                         account = item.get("account", "Sales")
-                        amount = float(item.get("baseAmount", item.get("amount", 0)))
+                        item_base = item.get("baseAmount")
+                        item_amt = item.get("amount")
+                        amount = safe_float(item_base if item_base is not None else item_amt, 0)
                         if amount > 0:
                             posting.credit(account, amount)
             else:
                 posting.credit("Sales", discounted_total)
 
             # Credit Output Tax Payable — Liability increases
-            tax_total = float(doc.get("taxTotal", 0)) * exchange_rate
+            tax_total = safe_float(doc.get("taxTotal"), 0) * exchange_rate
             if tax_total > 0:
                 posting.credit("Output Tax Payable", tax_total)
 
@@ -162,14 +173,16 @@ class InvoiceModel(BaseModel):
                 for item in items_data:
                     if isinstance(item, dict):
                         account = item.get("account", "Cost of Goods Sold")
-                        amount = float(item.get("baseAmount", item.get("amount", 0)))
+                        item_base = item.get("baseAmount")
+                        item_amt = item.get("amount")
+                        amount = safe_float(item_base if item_base is not None else item_amt, 0)
                         if amount > 0:
                             posting.debit(account, amount)
             else:
-                posting.debit("Cost of Goods Sold", float(doc.get("netTotal", 0)) * exchange_rate)
+                posting.debit("Cost of Goods Sold", safe_float(doc.get("netTotal"), 0) * exchange_rate)
 
             # Debit Input Tax Credit — Asset increases
-            tax_total = float(doc.get("taxTotal", 0)) * exchange_rate
+            tax_total = safe_float(doc.get("taxTotal"), 0) * exchange_rate
             if tax_total > 0:
                 posting.debit("Input Tax Credit", tax_total)
 
@@ -194,17 +207,31 @@ class InvoiceModel(BaseModel):
 
 
 def _save_ledger_entry(entry) -> str:
-    """Save a single ledger entry to the AccountingLedgerEntry table."""
+    """Save a single ledger entry to the AccountingLedgerEntry table if not already saved."""
     conn = db.get_connection()
+    ref_type = getattr(entry, "reference_type", "")
+    ref_name = getattr(entry, "reference_name", "")
+    acct = getattr(entry, "account", "")
+    dr = safe_float(getattr(entry, "debit", 0), 0)
+    cr = safe_float(getattr(entry, "credit", 0), 0)
+    dt = entry.date.isoformat() if hasattr(entry.date, "isoformat") else str(entry.date)
+
+    if ref_type and ref_name:
+        existing = conn.execute(
+            """SELECT name FROM AccountingLedgerEntry
+               WHERE reference_type = ? AND reference_name = ? AND account = ? AND debit = ? AND credit = ? AND reverted = 0""",
+            (ref_type, ref_name, acct, dr, cr)
+        ).fetchone()
+        if existing:
+            return existing[0]
+
     import uuid
     name = str(uuid.uuid4())[:8]
     conn.execute(
         """INSERT INTO AccountingLedgerEntry
            (name, account, party, date, debit, credit, reference_type, reference_name, reverted)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
-        (name, entry.account, entry.party or "",
-         entry.date.isoformat() if hasattr(entry.date, "isoformat") else str(entry.date),
-         entry.debit, entry.credit, entry.reference_type, entry.reference_name)
+        (name, acct, getattr(entry, "party", "") or "", dt, dr, cr, ref_type, ref_name)
     )
     conn.commit()
     return name
@@ -220,7 +247,8 @@ def _reverse_ledger_entry(entry: dict):
            (name, account, party, date, debit, credit, reference_type, reference_name, reverted)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
         (name, entry["account"], entry.get("party", ""), entry.get("date", ""),
-         float(entry.get("credit", 0)), float(entry.get("debit", 0)),
+         safe_float(entry.get("credit"), 0), safe_float(entry.get("debit"), 0),
          entry.get("reference_type", ""), entry.get("reference_name", ""))
     )
     conn.commit()
+

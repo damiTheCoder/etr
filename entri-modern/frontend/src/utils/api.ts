@@ -54,6 +54,10 @@ export const api = {
   cancel: <T = any>(schema: string, name: string) => request<T>(`/${schema}/${encodeURIComponent(name)}/cancel`, {
     method: 'POST',
   }),
+  resetToDraft: <T = any>(schema: string, name: string) => request<T>(`/${schema}/${encodeURIComponent(name)}/reset-to-draft`, {
+    method: 'POST',
+  }),
+  getAuditLogs: (schema: string, name: string) => request<any[]>(`/${schema}/${encodeURIComponent(name)}/audit-logs`),
   markPaid: <T = any>(schema: string, name: string) => request<T>(`/${schema}/${encodeURIComponent(name)}/mark-paid`, {
     method: 'POST',
   }),

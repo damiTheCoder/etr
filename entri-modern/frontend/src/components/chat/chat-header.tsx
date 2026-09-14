@@ -42,8 +42,12 @@ function PureChatHeader({
   return (
     <header className="flex h-14 shrink-0 items-center justify-between px-6 pt-1 select-none bg-slate-100 text-slate-900 relative">
       <div className="flex items-center gap-2.5">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs">
-          <AnthropicLogo className="size-4" />
+        <div className="flex size-7 items-center justify-center rounded-full overflow-hidden border border-slate-200/80 bg-transparent shadow-2xs">
+          <img
+            src="/logo.png"
+            alt="entri AI"
+            className="size-full rounded-full object-cover filter grayscale contrast-200"
+          />
         </div>
         <span className="font-semibold text-sm text-slate-900 tracking-tight">entri AI</span>
       </div>

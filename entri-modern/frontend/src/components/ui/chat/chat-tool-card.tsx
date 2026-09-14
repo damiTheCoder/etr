@@ -5,6 +5,7 @@ import {
   Users,
   FileText,
   TrendingUp,
+  BarChart3,
   CheckCircle2,
   Clock,
   CreditCard,
@@ -66,6 +67,133 @@ const ToolCardWrapper: React.FC<ToolCardWrapperProps> = ({
   )
 }
 
+const DocActionCard: React.FC<{ tool: ToolExecution }> = ({ tool }) => {
+  const r = tool.result
+  const schemaName = r.schema_name || (tool.name.includes("sales") ? "SalesInvoice" : tool.name.includes("purchase") ? "PurchaseInvoice" : tool.name.includes("payment") ? "Payment" : "JournalEntry")
+  const docName = r.doc_name || r.invoice_name || r.payment_name || r.jv_name
+
+  const [status, setStatus] = React.useState<string>(r.status || "Draft")
+  const [submitting, setSubmitting] = React.useState<boolean>(false)
+  const [feedbackMsg, setFeedbackMsg] = React.useState<string | null>(null)
+
+  const handleAction = async (actionType: "submit" | "draft") => {
+    if (!docName || submitting) return
+    setSubmitting(true)
+    try {
+      const res = await fetch("/api/ai/submit-doc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schema_name: schemaName,
+          doc_name: docName,
+          action: actionType,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setStatus(data.status)
+        setFeedbackMsg(data.message)
+      }
+    } catch (e: any) {
+      console.error("Doc submission action error:", e)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const isSubmitted = status === "Submitted"
+
+  return (
+    <ToolCardWrapper title={`${schemaName} Created`} icon={CheckCircle2}>
+      <div className="space-y-3 bg-white/90 p-3.5 rounded-xl border-none text-xs shadow-2xs">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-slate-800 text-sm">{docName}</span>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] px-2 py-0.5 font-semibold border-none",
+              isSubmitted ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-700"
+            )}
+          >
+            {isSubmitted ? "Submitted & Posted to Ledger" : "Draft"}
+          </Badge>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white">
+          <table className="w-full text-left text-xs border-collapse font-sans">
+            <tbody className="divide-y divide-slate-100">
+              {r.customer && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Customer</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900">{r.customer}</td>
+                </tr>
+              )}
+              {r.supplier && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Supplier</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900">{r.supplier}</td>
+                </tr>
+              )}
+              {r.party && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Party</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900">{r.party}</td>
+                </tr>
+              )}
+              {r.grand_total !== undefined && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Grand Total</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.grand_total).toLocaleString()}</td>
+                </tr>
+              )}
+              {r.amount !== undefined && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Amount</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.amount).toLocaleString()}</td>
+                </tr>
+              )}
+              {r.total_debit !== undefined && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2 px-3 text-slate-500 font-medium">Total Debit / Credit</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.total_debit).toLocaleString()}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {feedbackMsg ? (
+          <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>{feedbackMsg}</span>
+          </div>
+        ) : (
+          !isSubmitted && (
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleAction("submit")}
+                className="flex-1 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-xs transition-all shadow-xs disabled:opacity-50 cursor-pointer border-none"
+              >
+                {submitting ? "Submitting..." : "Submit to Ledger"}
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleAction("draft")}
+                className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-all border border-slate-200 disabled:opacity-50 cursor-pointer"
+              >
+                Keep as Draft
+              </button>
+            </div>
+          )
+        )}
+      </div>
+    </ToolCardWrapper>
+  )
+}
+
 export const renderShadcnToolCard = (tool: ToolExecution) => {
   if (!tool.result) return null
 
@@ -78,15 +206,27 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
         {list.length === 0 ? (
           <p className="text-slate-500 italic text-xs">No records found.</p>
         ) : (
-          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-1">
-            {list.map((c: any, idx: number) => (
-              <div key={idx} className="flex justify-between items-center bg-white/90 p-3 rounded-xl border-none shadow-2xs">
-                <span className="font-medium text-slate-900 text-xs">{c.name}</span>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-200/70 text-slate-600 font-medium border-none">
-                  {c.partyType || (isCustomer ? "Customer" : "Supplier")}
-                </span>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse font-sans">
+              <thead>
+                <tr className="border-b border-slate-200/80 bg-slate-100/70 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3.5 font-semibold">Name</th>
+                  <th className="py-2.5 px-3.5 text-right font-semibold">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                {list.map((c: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="py-2.5 px-3.5 font-medium text-slate-900">{c.name}</td>
+                    <td className="py-2.5 px-3.5 text-right">
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium border border-slate-200/60">
+                        {c.partyType || (isCustomer ? "Customer" : "Supplier")}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </ToolCardWrapper>
@@ -102,23 +242,34 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
         {invoices.length === 0 ? (
           <p className="text-slate-500 italic text-xs">No invoices found.</p>
         ) : (
-          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-1">
-            {invoices.map((inv: any, idx: number) => (
-              <div key={idx} className="flex justify-between items-center bg-white/90 p-3 rounded-xl border-none shadow-2xs">
-                <div>
-                  <div className="font-medium text-slate-900 text-xs">{inv.name}</div>
-                  <div className="text-slate-500 text-[11px]">
-                    {inv.customer || inv.supplier || inv.party} &bull; {inv.date}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold text-slate-900 text-xs">${(inv.grandTotal || 0).toLocaleString()}</div>
-                  <span className="text-[10px] text-emerald-600 font-medium">
-                    {inv.status || "Submitted"}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse font-sans">
+              <thead>
+                <tr className="border-b border-slate-200/80 bg-slate-100/70 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3.5 font-semibold">Invoice No</th>
+                  <th className="py-2.5 px-3.5 font-semibold">Party & Date</th>
+                  <th className="py-2.5 px-3.5 text-right font-semibold">Grand Total</th>
+                  <th className="py-2.5 px-3.5 text-right font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {invoices.map((inv: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="py-2.5 px-3.5 font-semibold text-slate-900">{inv.name}</td>
+                    <td className="py-2.5 px-3.5 text-slate-600">
+                      <div>{inv.customer || inv.supplier || inv.party}</div>
+                      <div className="text-[10px] text-slate-400">{inv.date}</div>
+                    </td>
+                    <td className="py-2.5 px-3.5 text-right font-semibold text-slate-900 tabular-nums">${(inv.grandTotal || 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3.5 text-right">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
+                        {inv.status || "Submitted"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </ToolCardWrapper>
@@ -126,15 +277,36 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
   }
 
   // 3. Document Creation Result
-  if (tool.name === "create_sales_invoice" || tool.name === "create_purchase_invoice" || tool.name === "create_party") {
+  if (
+    tool.name === "create_sales_invoice" ||
+    tool.name === "create_purchase_invoice" ||
+    tool.name === "create_payment" ||
+    tool.name === "create_journal_entry"
+  ) {
+    return <DocActionCard tool={tool} />
+  }
+
+  if (tool.name === "create_party") {
     const r = tool.result
     return (
-      <ToolCardWrapper title="Document Created" icon={CheckCircle2}>
-        <div className="space-y-2 text-slate-900 bg-white/90 p-3 rounded-xl border-none text-xs shadow-2xs">
-          {r.invoice_name && <div className="flex justify-between"><span className="text-slate-500">ID:</span> <span className="font-medium">{r.invoice_name}</span></div>}
-          {r.party_name && <div className="flex justify-between"><span className="text-slate-500">Party Name:</span> <span className="font-medium">{r.party_name}</span></div>}
-          {r.customer && <div className="flex justify-between"><span className="text-slate-500">Customer:</span> <span className="font-medium">{r.customer}</span></div>}
-          {r.grand_total !== undefined && <div className="flex justify-between"><span className="text-slate-500">Grand Total:</span> <span className="font-semibold text-emerald-600">${r.grand_total.toLocaleString()}</span></div>}
+      <ToolCardWrapper title="Party Created" icon={CheckCircle2}>
+        <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xs">
+          <table className="w-full text-left text-xs border-collapse font-sans">
+            <tbody className="divide-y divide-slate-100">
+              {r.party_name && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2.5 px-3.5 text-slate-500 font-medium">Party Name</td>
+                  <td className="py-2.5 px-3.5 text-right font-semibold text-slate-900">{r.party_name}</td>
+                </tr>
+              )}
+              {r.party_type && (
+                <tr className="hover:bg-slate-50/50">
+                  <td className="py-2.5 px-3.5 text-slate-500 font-medium">Party Type</td>
+                  <td className="py-2.5 px-3.5 text-right font-semibold text-slate-900">{r.party_type}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </ToolCardWrapper>
     )
@@ -148,19 +320,33 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
         {payments.length === 0 ? (
           <p className="text-slate-500 italic text-xs">No payments found.</p>
         ) : (
-          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pr-1">
-            {payments.map((p: any, idx: number) => (
-              <div key={idx} className="flex justify-between items-center bg-white/90 p-3 rounded-xl border-none shadow-2xs">
-                <div>
-                  <div className="font-medium text-slate-900 text-xs">{p.name} ({p.paymentType})</div>
-                  <div className="text-slate-500 text-[11px]">{p.party} &bull; {p.date}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold text-emerald-600 text-xs">${(p.amount || 0).toLocaleString()}</div>
-                  <span className="text-[10px] text-slate-500">{p.account}</span>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse font-sans">
+              <thead>
+                <tr className="border-b border-slate-200/80 bg-slate-100/70 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3.5 font-semibold">Payment ID</th>
+                  <th className="py-2.5 px-3.5 font-semibold">Party</th>
+                  <th className="py-2.5 px-3.5 text-right font-semibold">Amount</th>
+                  <th className="py-2.5 px-3.5 text-right font-semibold">Account</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {payments.map((p: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="py-2.5 px-3.5 font-semibold text-slate-900">
+                      <div>{p.name}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">{p.paymentType}</div>
+                    </td>
+                    <td className="py-2.5 px-3.5 text-slate-600">
+                      <div>{p.party}</div>
+                      <div className="text-[10px] text-slate-400">{p.date}</div>
+                    </td>
+                    <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600 tabular-nums">${(p.amount || 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3.5 text-right text-slate-500 text-[11px]">{p.account}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </ToolCardWrapper>
@@ -180,22 +366,48 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
     const netProf = m.netProfit ?? (totalInc - totalExp)
 
     return (
-      <ToolCardWrapper title="Financial Performance Overview" icon={TrendingUp}>
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="bg-white/90 p-3 rounded-xl border-none text-center shadow-2xs">
-            <div className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider mb-1">Income</div>
-            <div className="font-semibold text-xs sm:text-sm text-slate-900">${totalInc.toLocaleString()}</div>
-          </div>
-          <div className="bg-white/90 p-3 rounded-xl border-none text-center shadow-2xs">
-            <div className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider mb-1">Expenses</div>
-            <div className="font-semibold text-xs sm:text-sm text-slate-900">${totalExp.toLocaleString()}</div>
-          </div>
-          <div className="bg-white/90 p-3 rounded-xl border-none text-center shadow-2xs">
-            <div className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider mb-1">Net Profit</div>
-            <div className={cn("font-semibold text-xs sm:text-sm", netProf >= 0 ? "text-emerald-600" : "text-rose-600")}>
-              ${netProf.toLocaleString()}
-            </div>
-          </div>
+      <ToolCardWrapper title="Financial Performance Overview" icon={BarChart3}>
+        <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xs">
+          <table className="w-full text-left text-xs border-collapse font-sans">
+            <thead>
+              <tr className="border-b border-slate-200/80 bg-slate-100/70 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 px-4 font-semibold">Category</th>
+                <th className="py-2.5 px-4 text-right font-semibold">Amount</th>
+                <th className="py-2.5 px-4 text-right font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              <tr className="hover:bg-slate-50/50 transition-colors">
+                <td className="py-2.5 px-4 font-medium text-slate-800">Income</td>
+                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">${totalInc.toLocaleString()}</td>
+                <td className="py-2.5 px-4 text-right">
+                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-none bg-emerald-500/15 text-emerald-700 font-semibold">
+                    Revenue
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 transition-colors">
+                <td className="py-2.5 px-4 font-medium text-slate-800">Expenses</td>
+                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">${totalExp.toLocaleString()}</td>
+                <td className="py-2.5 px-4 text-right">
+                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-none bg-amber-500/15 text-amber-700 font-semibold">
+                    Operating
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="bg-slate-50/80 font-semibold">
+                <td className="py-2.5 px-4 font-semibold text-slate-900">Net Profit</td>
+                <td className={cn("py-2.5 px-4 text-right font-semibold text-xs sm:text-sm tabular-nums", netProf >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                  ${netProf.toLocaleString()}
+                </td>
+                <td className="py-2.5 px-4 text-right">
+                  <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 border-none font-semibold", netProf >= 0 ? "bg-emerald-500/15 text-emerald-700" : "bg-rose-500/15 text-rose-700")}>
+                    {netProf >= 0 ? "Profitable" : "Deficit"}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </ToolCardWrapper>
     )

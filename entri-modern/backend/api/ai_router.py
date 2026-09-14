@@ -489,7 +489,8 @@ def _execute_create_sales_invoice(customer: str, items: list, date: str = None, 
         "date": d_str,
         "grandTotal": grand_total,
         "outstandingAmount": grand_total,
-        "status": "Submitted",
+        "submitted": 0,
+        "status": "Draft",
         "items": formatted_items
     })
     inv_doc._not_inserted = True
@@ -497,11 +498,14 @@ def _execute_create_sales_invoice(customer: str, items: list, date: str = None, 
 
     return {
         "success": True,
+        "schema_name": "SalesInvoice",
+        "doc_name": inv_name,
         "invoice_name": inv_name,
         "customer": customer,
         "grand_total": grand_total,
-        "status": "Submitted",
-        "message": f"Sales Invoice {inv_name} created successfully for {customer}."
+        "status": "Draft",
+        "requires_action": True,
+        "message": f"Sales Invoice {inv_name} created as Draft for {customer} (${grand_total:,.2f}). Please choose whether to Submit to Ledger or Keep as Draft."
     }
 
 def _execute_get_purchase_invoices(supplier: str = "", limit: int = 10):
@@ -545,7 +549,8 @@ def _execute_create_purchase_invoice(supplier: str, items: list, date: str = Non
         "date": d_str,
         "grandTotal": grand_total,
         "outstandingAmount": grand_total,
-        "status": "Submitted",
+        "submitted": 0,
+        "status": "Draft",
         "items": formatted_items
     })
     inv_doc._not_inserted = True
@@ -553,11 +558,14 @@ def _execute_create_purchase_invoice(supplier: str, items: list, date: str = Non
 
     return {
         "success": True,
+        "schema_name": "PurchaseInvoice",
+        "doc_name": inv_name,
         "invoice_name": inv_name,
         "supplier": supplier,
         "grand_total": grand_total,
-        "status": "Submitted",
-        "message": f"Purchase Invoice {inv_name} created successfully from {supplier}."
+        "status": "Draft",
+        "requires_action": True,
+        "message": f"Purchase Invoice {inv_name} created as Draft from {supplier} (${grand_total:,.2f}). Please choose whether to Submit to Ledger or Keep as Draft."
     }
 
 def _execute_get_payments(party: str = "", limit: int = 10):
@@ -583,18 +591,23 @@ def _execute_create_payment(party: str, amount: float, payment_type: str = "Rece
         "paidAmount": amount,
         "date": date_cls.today().isoformat(),
         "referenceNo": reference,
-        "status": "Submitted"
+        "submitted": 0,
+        "status": "Draft"
     })
     doc._not_inserted = True
     db.insert_doc(doc)
 
     return {
         "success": True,
+        "schema_name": "Payment",
+        "doc_name": pay_name,
         "payment_name": pay_name,
         "party": party,
         "amount": amount,
         "payment_type": payment_type,
-        "message": f"Payment entry {pay_name} of ₦{amount:,.2f} recorded for {party}."
+        "status": "Draft",
+        "requires_action": True,
+        "message": f"Payment entry {pay_name} of ${amount:,.2f} recorded as Draft for {party}. Please choose whether to Submit to Ledger or Keep as Draft."
     }
 
 def _execute_get_journal_entries(limit: int = 10):
@@ -630,7 +643,8 @@ def _execute_create_journal_entry(entries: list, remark: str = ""):
         "userRemark": remark,
         "totalDebit": total_debit,
         "totalCredit": total_credit,
-        "status": "Submitted",
+        "submitted": 0,
+        "status": "Draft",
         "accounts": formatted_accounts
     })
     doc._not_inserted = True
@@ -638,10 +652,14 @@ def _execute_create_journal_entry(entries: list, remark: str = ""):
 
     return {
         "success": True,
+        "schema_name": "JournalEntry",
+        "doc_name": jv_name,
         "jv_name": jv_name,
         "total_debit": total_debit,
         "total_credit": total_credit,
-        "message": f"Journal Entry {jv_name} posted successfully."
+        "status": "Draft",
+        "requires_action": True,
+        "message": f"Journal Entry {jv_name} created as Draft. Please choose whether to Submit to Ledger or Keep as Draft."
     }
 
 def _execute_get_purchase_orders(supplier: str = "", limit: int = 10):
@@ -1014,9 +1032,9 @@ async def ai_chat_endpoint(req: ChatRequest):
     system_prompt = {
         "role": "system",
         "content": (
-            "You are entri AI accounting assistant. Your responses must be neat, professional, and clear. "
-            "Do NOT use raw markdown asterisks (**) or raw markdown syntax symbols in text. "
-            "Provide clean, well-formatted plain text. "
+            "You are entri AI accounting assistant. Your responses must be neat, professional, and structured. "
+            "When summarizing financial figures, performance metrics, lists of transactions, or accounting data, format them cleanly in markdown table format. "
+            "Do NOT use raw markdown asterisks (**) or raw markdown syntax symbols in plain text. "
             "Available tools: get_customers, get_parties, create_party, get_sales_invoices, "
             "create_sales_invoice, get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, "
             "get_journal_entries, create_journal_entry, get_purchase_orders, create_purchase_order, get_items, "
@@ -1152,3 +1170,49 @@ async def ai_chat_endpoint(req: ChatRequest):
     except Exception as api_err:
         print(f"OpenRouter connection error ({api_err}), executing deterministic local intent handler.")
         return _local_fallback_intent_executor(last_user_msg)
+
+
+class DocSubmitRequest(BaseModel):
+    schema_name: str
+    doc_name: str
+    action: str = "submit"
+
+
+@router.post("/submit-doc")
+async def submit_or_draft_doc(req: DocSubmitRequest):
+    from backend.main import get_model
+    model_name = "Payment" if req.schema_name in ["PaymentEntry", "Payment"] else req.schema_name
+    model = get_model(model_name)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+
+    doc = model.get(req.doc_name) or db.get_doc(model_name, req.doc_name)
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Document '{req.doc_name}' not found")
+
+    if req.action == "submit":
+        doc._data["submitted"] = 1
+        doc._data["status"] = "Submitted"
+        db.update_doc(doc)
+
+        try:
+            await model.after_submit(doc)
+        except Exception as e:
+            print(f"GL submission error for {req.doc_name}: {e}")
+
+        return {
+            "success": True,
+            "status": "Submitted",
+            "doc_name": req.doc_name,
+            "message": f"Transaction {req.doc_name} has been submitted and posted to the General Ledger!"
+        }
+    else:
+        doc._data["submitted"] = 0
+        doc._data["status"] = "Draft"
+        db.update_doc(doc)
+        return {
+            "success": True,
+            "status": "Draft",
+            "doc_name": req.doc_name,
+            "message": f"Transaction {req.doc_name} kept as Draft."
+        }

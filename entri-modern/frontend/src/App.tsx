@@ -106,7 +106,7 @@ function AppLayout() {
       >
         <div className={`flex h-14 shrink-0 items-center justify-between px-4 ${sidebarCollapsed ? 'md:justify-center md:px-0' : ''}`}>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2.5">
-            <img src="/logo.png" alt="entri logo" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
+            <img src="/logo.png" alt="entri logo" className="w-8 h-8 rounded-full shadow-sm object-cover" />
             <span className={`tracking-tight text-blue-600 ${sidebarCollapsed ? 'md:hidden' : 'inline'}`}>entri</span>
           </h1>
           <button
@@ -346,7 +346,7 @@ function AppLayout() {
             <div className="h-5 w-[1px] bg-slate-200"></div>
 
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="entri logo" className="w-6 h-6 rounded object-cover" />
+              <img src="/logo.png" alt="entri logo" className="w-6 h-6 rounded-full object-cover" />
               <span className="text-base font-bold tracking-tight text-blue-600">entri</span>
             </div>
           </div>
@@ -371,6 +371,7 @@ function AppLayout() {
               <Route path="/payments/new" element={<PaymentForm />} />
               <Route path="/journal-entries" element={<JournalEntries />} />
               <Route path="/journal-entries/new" element={<JournalEntryForm />} />
+              <Route path="/journal-entries/:name" element={<JournalEntryForm />} />
               <Route path="/purchase-orders" element={<PurchaseOrders />} />
               <Route path="/purchase-orders/new" element={<PurchaseOrderForm />} />
               <Route path="/reconciliations" element={<Reconciliations />} />

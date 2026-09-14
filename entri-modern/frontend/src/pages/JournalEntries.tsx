@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/utils/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card } from '@/components/ui/card'
 
 export default function JournalEntries() {
+  const navigate = useNavigate()
   const [entries, setEntries] = useState<any[]>([])
 
   function formatNumber(v: number) {
@@ -94,9 +95,17 @@ export default function JournalEntries() {
           </TableHeader>
           <TableBody>
             {entries.map((je) => (
-              <TableRow key={je.name}>
-                <TableCell className="font-medium">
-                  <Link to={`/journal-entries/${je.name}`} className="text-gray-700 hover:text-gray-900 hover:underline">
+              <TableRow
+                key={je.name}
+                className="cursor-pointer hover:bg-slate-50 transition-colors"
+                onClick={() => navigate(`/journal-entries/${je.name}`)}
+              >
+                <TableCell className="font-medium text-blue-600 font-mono">
+                  <Link
+                    to={`/journal-entries/${je.name}`}
+                    className="hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {je.name}
                   </Link>
                 </TableCell>
@@ -107,16 +116,24 @@ export default function JournalEntries() {
                 <TableCell className="text-center">
                   <Badge variant={statusVariant(je)}>{statusLabel(je)}</Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <Link to={`/journal-entries/${je.name}`}>
+                        {je.submitted ? 'View / Edit' : 'Edit'}
+                      </Link>
+                    </Button>
                     {!je.submitted && (
-                      <Button variant="ghost" size="sm" onClick={() => submitEntry(je.name)}>
-                        Submit
-                      </Button>
-                    )}
-                    {je.submitted && !je.cancelled && (
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => cancelEntry(je.name)}>
-                        Cancel
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white border border-black"
+                        onClick={() => submitEntry(je.name)}
+                      >
+                        Post
                       </Button>
                     )}
                   </div>

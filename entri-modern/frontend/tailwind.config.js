@@ -9,6 +9,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Glacial Indifference', 'sans-serif'],
+        mono: ['Glacial Indifference', 'sans-serif'],
+        serif: ['Glacial Indifference', 'sans-serif'],
       },
       colors: {
         brand: {
