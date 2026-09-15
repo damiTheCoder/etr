@@ -315,16 +315,21 @@ export default function Dashboard() {
         const netInc = (pl as any)?.netProfit ?? (pl as any)?.net_profit ?? (rev - exp)
         setNetProfit(netInc)
 
-        let cashVal = 0
-        if (bs?.totalCash !== undefined && bs?.totalCash !== null) {
-          cashVal = Number(bs.totalCash)
-        } else if (allEntries.length > 0) {
+        let cashInflow = 0
+        let cashOutflow = 0
+        if (allEntries.length > 0) {
           for (const entry of allEntries) {
             if (isCashAccount(entry.account)) {
-              cashVal += Number(entry.debit || 0) - Number(entry.credit || 0)
+              cashInflow += Number(entry.debit || 0)
+              cashOutflow += Number(entry.credit || 0)
             }
           }
-        } else if (tb?.rows && Array.isArray(tb.rows)) {
+        }
+
+        let cashVal = cashInflow - cashOutflow
+        if (bs?.totalCash !== undefined && bs?.totalCash !== null) {
+          cashVal = Number(bs.totalCash)
+        } else if (cashVal === 0 && tb?.rows && Array.isArray(tb.rows)) {
           for (const row of tb.rows) {
             if (row.account_type === 'Bank' || row.account_type === 'Cash' || isCashAccount(row.account)) {
               cashVal += Number(row.debit || 0) - Number(row.credit || 0)
@@ -333,13 +338,31 @@ export default function Dashboard() {
         }
         setCashBalance(cashVal)
 
+        let totalDebitVal = Number((tb as any)?.totalDebit || (tb as any)?.total_debit || 0)
+        let totalCreditVal = Number((tb as any)?.totalCredit || (tb as any)?.total_credit || 0)
+        if (!totalDebitVal && (tb as any)?.rows && Array.isArray((tb as any).rows)) {
+          for (const row of (tb as any).rows) {
+            totalDebitVal += Number(row.debit || 0)
+            totalCreditVal += Number(row.credit || 0)
+          }
+        }
+
+        const totalAssetsVal = Number((bs as any)?.totalAssets || (bs as any)?.total_assets || cashVal)
+        const totalLiabilitiesVal = Number((bs as any)?.totalLiabilities || (bs as any)?.total_liabilities || ap)
+        const totalEquityVal = Number((bs as any)?.totalEquity || (bs as any)?.total_equity || (totalAssetsVal - totalLiabilitiesVal))
+
         setBannerMetrics({
-          cashBalance: cashVal,
-          totalRevenue: rev,
-          totalExpenses: exp,
+          cashInflow,
+          cashOutflow,
+          cashNet: cashVal,
+          revenue: rev,
+          expenses: exp,
           netProfit: netInc,
-          accountsReceivable: ar,
-          accountsPayable: ap,
+          totalAssets: totalAssetsVal,
+          totalLiabilities: totalLiabilitiesVal,
+          totalEquity: totalEquityVal,
+          totalDebit: totalDebitVal,
+          totalCredit: totalCreditVal,
         })
 
         setRecentSales(submittedSales.slice(0, 5))
@@ -358,6 +381,19 @@ export default function Dashboard() {
   const profitChartData = useMemo(() => buildChartData(rawData, 'profit', profitPeriod), [rawData, profitPeriod])
   const arChartData = useMemo(() => buildChartData(rawData, 'ar', arPeriod), [rawData, arPeriod])
   const apChartData = useMemo(() => buildChartData(rawData, 'ap', apPeriod), [rawData, apPeriod])
+
+  const getTrend = (chartData: ChartPoint[]) => {
+    if (chartData.length < 2) return { percent: 0, isUp: true }
+    const curr = chartData[chartData.length - 1]?.value || 0
+    const prev = chartData[chartData.length - 2]?.value || 0
+    if (prev === 0) return { percent: curr > 0 ? 100 : 0, isUp: curr >= 0 }
+    const diff = ((curr - prev) / Math.abs(prev)) * 100
+    return { percent: Math.abs(Math.round(diff * 10) / 10), isUp: diff >= 0 }
+  }
+
+  const cashTrend = getTrend(cashChartData)
+  const revenueTrend = getTrend(revenueChartData)
+  const expensesTrend = getTrend(expensesChartData)
 
   function renderChart(
     data: ChartPoint[],
@@ -477,8 +513,8 @@ export default function Dashboard() {
             </div>
             <CardDescription className="text-xs text-slate-500">Inflows (debits) vs Outflows (credits)</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(cashBalance)}</div>
-            <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
-              Trending up by 8.4% this month <TrendingUp className="h-3.5 w-3.5" />
+            <div className={`flex items-center gap-1.5 font-medium text-xs pt-1 ${cashTrend.isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {cashTrend.isUp ? 'Trending up' : 'Trending down'} by {cashTrend.percent}% this period {cashTrend.isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             </div>
             <div className="text-slate-400 text-[11px]">Verified against ledger bank & cash accounts</div>
           </CardHeader>
@@ -498,8 +534,8 @@ export default function Dashboard() {
             </div>
             <CardDescription className="text-xs text-slate-500">Gross sales invoiced vs Paid & collected</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalRevenue)}</div>
-            <div className="flex items-center gap-1.5 font-medium text-emerald-600 text-xs pt-1">
-              Trending up by 14.2% this month <TrendingUp className="h-3.5 w-3.5" />
+            <div className={`flex items-center gap-1.5 font-medium text-xs pt-1 ${revenueTrend.isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {revenueTrend.isUp ? 'Trending up' : 'Trending down'} by {revenueTrend.percent}% this period {revenueTrend.isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             </div>
             <div className="text-slate-400 text-[11px]">Cumulative sales invoice totals</div>
           </CardHeader>
@@ -519,8 +555,8 @@ export default function Dashboard() {
             </div>
             <CardDescription className="text-xs text-slate-500">Gross purchase cost vs Settled & paid</CardDescription>
             <div className="text-3xl font-semibold text-slate-900 pt-1">{formatCurrency(totalExpenses)}</div>
-            <div className="flex items-center gap-1.5 font-medium text-amber-600 text-xs pt-1">
-              Controlled expense trajectory <TrendingDown className="h-3.5 w-3.5" />
+            <div className={`flex items-center gap-1.5 font-medium text-xs pt-1 ${expensesTrend.isUp ? 'text-amber-600' : 'text-emerald-600'}`}>
+              {expensesTrend.isUp ? 'Increased' : 'Decreased'} by {expensesTrend.percent}% this period {expensesTrend.isUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             </div>
             <div className="text-slate-400 text-[11px]">Outlays from purchase invoices & vouchers</div>
           </CardHeader>

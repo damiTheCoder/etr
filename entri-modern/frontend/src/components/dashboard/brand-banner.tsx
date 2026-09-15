@@ -132,7 +132,8 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
   const [filterOpen, setFilterOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<StatementCategory>('Cash Book')
   const [subMetricIndex, setSubMetricIndex] = useState(0)
-  const [selectedMonth, setSelectedMonth] = useState('September 2026')
+  const defaultMonthStr = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonthStr)
   const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -204,7 +205,7 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
           </div>
 
           <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-            <span>For Sept 2026</span>
+            <span>For {selectedMonth}</span>
             <span>&bull;</span>
             <Link
               to={currentConfig.route}
@@ -277,7 +278,7 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
             <div className="flex items-center justify-between pt-2 border-t border-slate-200/50">
               <button
                 type="button"
-                onClick={() => setSelectedMonth('September 2026')}
+                onClick={() => setSelectedMonth(defaultMonthStr)}
                 className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
               >
                 This month
