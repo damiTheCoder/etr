@@ -880,11 +880,11 @@ def _local_fallback_intent_executor(user_text: str):
     # Invoices
     if "purchase invoice" in t or "pinv" in t or "bill" in t:
         if any(k in t for k in ["create", "add", "new", "generate", "post", "make"]):
-            res = _execute_create_purchase_invoice(supplier="Vendor", items=[{"item_code": "Supplies", "qty": 1, "rate": 100}])
+            nav_res = _execute_navigate_to_page("/purchase-invoices/new")
             return {
                 "role": "assistant",
-                "content": f"Created purchase invoice **{res.get('invoice_name')}** for {res.get('supplier')}.",
-                "executed_tools": [{"name": "create_purchase_invoice", "arguments": {"supplier": "Vendor", "items": [{"item_code": "Supplies", "qty": 1, "rate": 100}]}, "result": res}]
+                "content": "Opening Purchase Invoice creation form...",
+                "executed_tools": [{"name": "navigate_to_page", "arguments": {"page_route": "/purchase-invoices/new"}, "result": nav_res}]
             }
         res = _execute_get_purchase_invoices()
         return {
@@ -895,17 +895,11 @@ def _local_fallback_intent_executor(user_text: str):
 
     if "sales invoice" in t or "invoice" in t or "sinv" in t:
         if any(k in t for k in ["create", "add", "new", "generate", "post", "make"]):
-            # Extract customer name if possible
-            customer = "Acme Corp"
-            if " for " in t:
-                parts = user_text.split(" for ")
-                if len(parts) > 1:
-                    customer = parts[1].split()[0]
-            res = _execute_create_sales_invoice(customer=customer, items=[{"item_code": "Consulting Services", "qty": 1, "rate": 500}])
+            nav_res = _execute_navigate_to_page("/sales-invoices/new")
             return {
                 "role": "assistant",
-                "content": f"Created sales invoice **{res.get('invoice_name')}** for {customer} total {res.get('grand_total')}.",
-                "executed_tools": [{"name": "create_sales_invoice", "arguments": {"customer": customer, "items": [{"item_code": "Consulting Services", "qty": 1, "rate": 500}]}, "result": res}]
+                "content": "Opening Sales Invoice creation form...",
+                "executed_tools": [{"name": "navigate_to_page", "arguments": {"page_route": "/sales-invoices/new"}, "result": nav_res}]
             }
         res = _execute_get_sales_invoices()
         return {
