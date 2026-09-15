@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { api } from '@/utils/api'
+import { useCompany } from '@/context/CompanyContext'
 
 interface SearchResultItem {
   id: string
@@ -66,6 +67,7 @@ const STATIC_PAGES: SearchResultItem[] = [
 ]
 
 export default function GlobalSearch() {
+  const { formatCurrency } = useCompany()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [dataResults, setDataResults] = useState<SearchResultItem[]>([])
@@ -119,7 +121,7 @@ export default function GlobalSearch() {
         results.push({
           id: `sinv-${inv.name}`,
           title: inv.name,
-          subtitle: `Customer: ${inv.customer || 'N/A'} • $${Number(inv.grand_total || 0).toFixed(2)} (${inv.status || 'Draft'})`,
+          subtitle: `Customer: ${inv.customer || 'N/A'} • ${formatCurrency(inv.grand_total || 0)} (${inv.status || 'Draft'})`,
           category: 'Sales Invoices',
           url: `/sales-invoices/${encodeURIComponent(inv.name)}`,
           icon: <FileText className="w-4 h-4 text-blue-600" />,
@@ -131,7 +133,7 @@ export default function GlobalSearch() {
         results.push({
           id: `pinv-${inv.name}`,
           title: inv.name,
-          subtitle: `Supplier: ${inv.supplier || 'N/A'} • $${Number(inv.grand_total || 0).toFixed(2)} (${inv.status || 'Draft'})`,
+          subtitle: `Supplier: ${inv.supplier || 'N/A'} • ${formatCurrency(inv.grand_total || 0)} (${inv.status || 'Draft'})`,
           category: 'Purchase Invoices',
           url: `/purchase-invoices/${encodeURIComponent(inv.name)}`,
           icon: <Receipt className="w-4 h-4 text-purple-600" />,
@@ -143,7 +145,7 @@ export default function GlobalSearch() {
         results.push({
           id: `pay-${pay.name}`,
           title: pay.name,
-          subtitle: `${pay.payment_type || 'Payment'} • Party: ${pay.party || 'N/A'} • $${Number(pay.paid_amount || 0).toFixed(2)}`,
+          subtitle: `${pay.payment_type || 'Payment'} • Party: ${pay.party || 'N/A'} • ${formatCurrency(pay.paid_amount || 0)}`,
           category: 'Payments',
           url: `/payments`,
           icon: <CreditCard className="w-4 h-4 text-emerald-600" />,
@@ -179,7 +181,7 @@ export default function GlobalSearch() {
         results.push({
           id: `item-${it.name}`,
           title: it.name,
-          subtitle: `Code: ${it.item_code || it.name} • Price: $${Number(it.standard_rate || 0).toFixed(2)}`,
+          subtitle: `Code: ${it.item_code || it.name} • Price: ${formatCurrency(it.standard_rate || 0)}`,
           category: 'Items',
           url: `/items/${encodeURIComponent(it.name)}`,
           icon: <Package className="w-4 h-4 text-amber-600" />,

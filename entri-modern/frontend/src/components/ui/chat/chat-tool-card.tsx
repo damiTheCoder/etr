@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react"
+import { useCompany } from "@/context/CompanyContext"
 
 export interface ToolExecution {
   name: string
@@ -68,6 +69,7 @@ const ToolCardWrapper: React.FC<ToolCardWrapperProps> = ({
 }
 
 const DocActionCard: React.FC<{ tool: ToolExecution }> = ({ tool }) => {
+  const { formatCurrency } = useCompany()
   const r = tool.result
   const schemaName = r.schema_name || (tool.name.includes("sales") ? "SalesInvoice" : tool.name.includes("purchase") ? "PurchaseInvoice" : tool.name.includes("payment") ? "Payment" : "JournalEntry")
   const docName = r.doc_name || r.invoice_name || r.payment_name || r.jv_name
@@ -143,19 +145,19 @@ const DocActionCard: React.FC<{ tool: ToolExecution }> = ({ tool }) => {
               {r.grand_total !== undefined && (
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-2 px-3 text-slate-500 font-medium">Grand Total</td>
-                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.grand_total).toLocaleString()}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(r.grand_total)}</td>
                 </tr>
               )}
               {r.amount !== undefined && (
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-2 px-3 text-slate-500 font-medium">Amount</td>
-                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.amount).toLocaleString()}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(r.amount)}</td>
                 </tr>
               )}
               {r.total_debit !== undefined && (
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-2 px-3 text-slate-500 font-medium">Total Debit / Credit</td>
-                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">${Number(r.total_debit).toLocaleString()}</td>
+                  <td className="py-2 px-3 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(r.total_debit)}</td>
                 </tr>
               )}
             </tbody>
@@ -194,7 +196,8 @@ const DocActionCard: React.FC<{ tool: ToolExecution }> = ({ tool }) => {
   )
 }
 
-export const renderShadcnToolCard = (tool: ToolExecution) => {
+const ShadcnToolCardComponent: React.FC<{ tool: ToolExecution }> = ({ tool }) => {
+  const { formatCurrency } = useCompany()
   if (!tool.result) return null
 
   // 1. Customers / Parties
@@ -260,7 +263,7 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
                       <div>{inv.customer || inv.supplier || inv.party}</div>
                       <div className="text-[10px] text-slate-400">{inv.date}</div>
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-semibold text-slate-900 tabular-nums">${(inv.grandTotal || 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3.5 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(inv.grandTotal || 0)}</td>
                     <td className="py-2.5 px-3.5 text-right">
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
                         {inv.status || "Submitted"}
@@ -341,7 +344,7 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
                       <div>{p.party}</div>
                       <div className="text-[10px] text-slate-400">{p.date}</div>
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600 tabular-nums">${(p.amount || 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3.5 text-right font-semibold text-emerald-600 tabular-nums">{formatCurrency(p.amount || 0)}</td>
                     <td className="py-2.5 px-3.5 text-right text-slate-500 text-[11px]">{p.account}</td>
                   </tr>
                 ))}
@@ -379,7 +382,7 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
             <tbody className="divide-y divide-slate-100">
               <tr className="hover:bg-slate-50/50 transition-colors">
                 <td className="py-2.5 px-4 font-medium text-slate-800">Income</td>
-                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">${totalInc.toLocaleString()}</td>
+                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(totalInc)}</td>
                 <td className="py-2.5 px-4 text-right">
                   <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-none bg-emerald-500/15 text-emerald-700 font-semibold">
                     Revenue
@@ -388,7 +391,7 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
               </tr>
               <tr className="hover:bg-slate-50/50 transition-colors">
                 <td className="py-2.5 px-4 font-medium text-slate-800">Expenses</td>
-                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">${totalExp.toLocaleString()}</td>
+                <td className="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(totalExp)}</td>
                 <td className="py-2.5 px-4 text-right">
                   <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-none bg-amber-500/15 text-amber-700 font-semibold">
                     Operating
@@ -398,7 +401,7 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
               <tr className="bg-slate-50/80 font-semibold">
                 <td className="py-2.5 px-4 font-semibold text-slate-900">Net Profit</td>
                 <td className={cn("py-2.5 px-4 text-right font-semibold text-xs sm:text-sm tabular-nums", netProf >= 0 ? "text-emerald-600" : "text-rose-600")}>
-                  ${netProf.toLocaleString()}
+                  {formatCurrency(netProf)}
                 </td>
                 <td className="py-2.5 px-4 text-right">
                   <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 border-none font-semibold", netProf >= 0 ? "bg-emerald-500/15 text-emerald-700" : "bg-rose-500/15 text-rose-700")}>
@@ -424,4 +427,8 @@ export const renderShadcnToolCard = (tool: ToolExecution) => {
   }
 
   return null
+}
+
+export const renderShadcnToolCard = (tool: ToolExecution) => {
+  return <ShadcnToolCardComponent tool={tool} />
 }

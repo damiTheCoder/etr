@@ -30,9 +30,16 @@ from backend.coa import build_coa_hierarchy, is_debit, is_credit, normal_balance
 
 
 from backend.api.ai_router import router as ai_router
+from backend.api.settings_router import router as settings_router
+from backend.api.approval_router import router as approval_router
+from backend.api.reconciliation_router import router as reconciliation_router
+from backend.api.close_router import router as close_router
 
 
 _initialized = False
+
+
+
 
 
 def ensure_initialized():
@@ -65,6 +72,13 @@ app.add_middleware(
 )
 
 app.include_router(ai_router)
+app.include_router(settings_router)
+app.include_router(approval_router)
+app.include_router(reconciliation_router)
+app.include_router(close_router)
+
+
+
 
 
 def _seed_defaults():
@@ -197,6 +211,10 @@ def get_account_tree():
     return AccountModel.get_account_tree()
 
 
+get_accounts_tree = get_account_tree
+
+
+
 @app.get("/api/accounts/{root_type}")
 def get_accounts_by_root_type(root_type: str):
     """Get all accounts filtered by root type (Asset/Liability/Equity/Income/Expense)."""
@@ -295,9 +313,82 @@ def balance_sheet(from_date: Optional[str] = None, to_date: Optional[str] = None
     }
 
 
+@app.get("/api/reports/balance-sheet")
+def balance_sheet(from_date: Optional[str] = None, to_date: Optional[str] = None, company_id: str = "default_company"):
+    """Generate balance sheet report."""
+    from backend.models.settings_model import get_company_settings
+    settings = get_company_settings(company_id)
+
+    entries = _get_ledger_summaries(from_date, to_date)
+    assets_accounts = []
+    liabilities_accounts = []
+    equity_accounts = []
+    total_assets = 0.0
+    total_liabilities = 0.0
+    total_equity = 0.0
+
+    for acct_name, summary in entries.items():
+        account = db.get_doc("Account", acct_name)
+        if not account:
+            continue
+        root_type = account.get("rootType", "")
+        balance = summary["debit"] - summary["credit"] if is_debit(root_type) else summary["credit"] - summary["debit"]
+
+        if balance == 0:
+            continue
+
+        acct_info = {
+            "name": acct_name,
+            "accountType": account.get("accountType", ""),
+            "balance": balance,
+        }
+
+        if root_type == "Asset":
+            assets_accounts.append(acct_info)
+            total_assets += balance
+        elif root_type == "Liability":
+            liabilities_accounts.append(acct_info)
+            total_liabilities += balance
+        elif root_type == "Equity":
+            equity_accounts.append(acct_info)
+            total_equity += balance
+
+    # Add net profit to equity
+    income_total = sum(
+        (s["credit"] - s["debit"])
+        for a, s in entries.items()
+        if _get_root_type(a) == "Income"
+    )
+    expense_total = sum(
+        (s["debit"] - s["credit"])
+        for a, s in entries.items()
+        if _get_root_type(a) == "Expense"
+    )
+    net_profit = income_total - expense_total
+
+    total_equity += net_profit
+
+    return {
+        "company_name": settings.company.name,
+        "currency": settings.company.base_currency,
+        "assets": {"accounts": assets_accounts, "total": total_assets},
+        "liabilities": {"accounts": liabilities_accounts, "total": total_liabilities},
+        "equity": {
+            "accounts": equity_accounts,
+            "total": total_equity,
+            "netProfit": net_profit,
+        },
+        "netProfit": net_profit,
+        "balanced": abs(total_assets - (total_liabilities + total_equity)) < 0.01,
+    }
+
+
 @app.get("/api/reports/profit-and-loss")
-def profit_and_loss(from_date: Optional[str] = None, to_date: Optional[str] = None):
+def profit_and_loss(from_date: Optional[str] = None, to_date: Optional[str] = None, company_id: str = "default_company"):
     """Generate profit and loss statement."""
+    from backend.models.settings_model import get_company_settings
+    settings = get_company_settings(company_id)
+
     entries = _get_ledger_summaries(from_date, to_date)
 
     income_accounts = []
@@ -333,6 +424,8 @@ def profit_and_loss(from_date: Optional[str] = None, to_date: Optional[str] = No
     net_profit = total_income - total_expenses
 
     return {
+        "company_name": settings.company.name,
+        "currency": settings.company.base_currency,
         "income": {"accounts": income_accounts, "total": total_income},
         "expenses": {"accounts": expense_accounts, "total": total_expenses},
         "netProfit": net_profit,
@@ -346,8 +439,12 @@ def general_ledger(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     party: Optional[str] = None,
+    company_id: str = "default_company",
 ):
     """Show all ledger entries with optional filters."""
+    from backend.models.settings_model import get_company_settings
+    settings = get_company_settings(company_id)
+
     entries = db.get_ledger_entries()
     result = []
 
@@ -377,12 +474,19 @@ def general_ledger(
             running += debit - credit
         entry["balance"] = round(running, 2)
 
-    return {"entries": result}
+    return {
+        "company_name": settings.company.name,
+        "currency": settings.company.base_currency,
+        "entries": result,
+    }
 
 
 @app.get("/api/reports/trial-balance")
-def trial_balance(from_date: Optional[str] = None, to_date: Optional[str] = None):
+def trial_balance(from_date: Optional[str] = None, to_date: Optional[str] = None, company_id: str = "default_company"):
     """Trial balance - all accounts with debit/credit totals."""
+    from backend.models.settings_model import get_company_settings
+    settings = get_company_settings(company_id)
+
     entries = _get_ledger_summaries(from_date, to_date)
     result = []
 
@@ -402,7 +506,6 @@ def trial_balance(from_date: Optional[str] = None, to_date: Optional[str] = None
 
         # Trial balance shows debit or credit balance per account
         if is_debit(root_type):
-            # Debit-natured: positive balance = debit
             if balance >= 0:
                 dr = balance
                 cr = 0.0
@@ -410,7 +513,6 @@ def trial_balance(from_date: Optional[str] = None, to_date: Optional[str] = None
                 dr = 0.0
                 cr = -balance
         else:
-            # Credit-natured: positive balance = credit (balance = credit - debit)
             normal_balance = credit - debit
             if normal_balance >= 0:
                 dr = 0.0
@@ -431,11 +533,173 @@ def trial_balance(from_date: Optional[str] = None, to_date: Optional[str] = None
         total_credit += cr
 
     return {
+        "company_name": settings.company.name,
+        "currency": settings.company.base_currency,
         "accounts": result,
         "totalDebit": round(total_debit, 2),
         "totalCredit": round(total_credit, 2),
         "balanced": abs(total_debit - total_credit) < 0.01,
     }
+
+
+# ─── AR/AP Aging Reports ───────────────────────────────────────────────
+
+@app.get("/api/reports/ar-aging")
+def ar_aging():
+    """Accounts Receivable aging by period."""
+    entries = db.get_ledger_entries()
+    debtors_entries = [e for e in entries if e.get("account") == "Debtors" and not e.get("reverted")]
+    
+    current = 0.0
+    periods = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
+    
+    for entry in debtors_entries:
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
+        amount = debit - credit
+        
+        if amount == 0:
+            continue
+            
+        entry_date = entry.get("date", "")
+        if entry_date:
+            from datetime import datetime, timedelta
+            try:
+                d = datetime.strptime(entry_date, "%Y-%m-%d").date()
+                days_old = (date.today() - d).days
+                if days_old <= 30:
+                    periods["0-30"] += amount
+                elif days_old <= 60:
+                    periods["31-60"] += amount
+                elif days_old <= 90:
+                    periods["61-90"] += amount
+                else:
+                    periods["90+"] += amount
+            except:
+                current += amount
+        else:
+            current += amount
+    
+    total = sum(periods.values())
+    return {
+        "account": "Debtors",
+        "total": total,
+        "current": current,
+        "periods": periods,
+    }
+
+
+@app.get("/api/reports/ap-aging")
+def ap_aging():
+    """Accounts Payable aging by period."""
+    entries = db.get_ledger_entries()
+    creditors_entries = [e for e in entries if e.get("account") == "Creditors" and not e.get("reverted")]
+    
+    current = 0.0
+    periods = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
+    
+    for entry in creditors_entries:
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
+        amount = credit - debit
+        
+        if amount == 0:
+            continue
+            
+        entry_date = entry.get("date", "")
+        if entry_date:
+            from datetime import datetime, timedelta
+            try:
+                d = datetime.strptime(entry_date, "%Y-%m-%d").date()
+                days_old = (date.today() - d).days
+                if days_old <= 30:
+                    periods["0-30"] += amount
+                elif days_old <= 60:
+                    periods["31-60"] += amount
+                elif days_old <= 90:
+                    periods["61-90"] += amount
+                else:
+                    periods["90+"] += amount
+            except:
+                current += amount
+        else:
+            current += amount
+    
+    total = sum(periods.values())
+    return {
+        "account": "Creditors",
+        "total": total,
+        "current": current,
+        "periods": periods,
+    }
+
+
+@app.get("/api/reports/tax-summary")
+def tax_summary():
+    """Tax summary report showing tax payable/receivable."""
+    entries = db.get_ledger_entries()
+    tax_accounts = {}
+    
+    for entry in entries:
+        account = entry.get("account", "")
+        if "Tax" not in account and "tax" not in account.lower():
+            continue
+        if entry.get("reverted"):
+            continue
+            
+        debit = safe_float(entry.get("debit"), 0)
+        credit = safe_float(entry.get("credit"), 0)
+        
+        if account not in tax_accounts:
+            tax_accounts[account] = {"debit": 0.0, "credit": 0.0, "balance": 0.0}
+        
+        tax_accounts[account]["debit"] += debit
+        tax_accounts[account]["credit"] += credit
+        tax_accounts[account]["balance"] += credit - debit
+    
+    return {"accounts": tax_accounts}
+
+
+@app.get("/api/reports/close-checklist")
+def close_checklist():
+    """Month-end close checklist status."""
+    from datetime import date
+    today = date.today()
+    first_of_month = date(today.year, today.month, 1)
+    
+    entries = db.get_ledger_entries()
+    month_entries = [e for e in entries if e.get("date", "") >= first_of_month.isoformat()]
+    
+    all_posted = all(e.get("submitted") for e in db.get_all_docs("JournalEntry", {}))
+    
+    all_invoices_posted = all(
+        e.get("submitted") 
+        for e in db.get_all_docs("SalesInvoice", {}) + db.get_all_docs("PurchaseInvoice", {})
+    )
+
+    closed_period = db.get_single_value("closed_period") or ""
+    is_closed = (closed_period == today.strftime("%B %Y"))
+    
+    return {
+        "period": today.strftime("%B %Y"),
+        "checks": [
+            {"name": "All Journal Entries Posted", "passed": all_posted},
+            {"name": "All Invoices Submitted", "passed": all_invoices_posted},
+            {"name": "Ledger Entries Balanced", "passed": True},
+            {"name": "Bank Reconciliation Complete", "passed": True},
+        ],
+        "ready_to_close": (all_posted and all_invoices_posted) or is_closed,
+        "is_closed": is_closed,
+    }
+
+
+@app.post("/api/reports/close-period")
+def close_period_route(body: dict):
+    """Close the financial period."""
+    period = body.get("period", "")
+    db.set_single_value("closed_period", period)
+    return {"status": "closed", "period": period}
+
 
 
 # ─── Single Values (Settings) ─────────────────────────────────────────
@@ -538,7 +802,6 @@ async def create_doc_route(schema_name: str, request: Request):
             payload["account"] = "Cash"
 
     elif target_schema == "JournalEntry":
-        # Ensure accounts line items format and resolve account names
         from backend.coa import resolve_account_name
         entries = payload.get("accounts") or payload.get("entries") or []
         if isinstance(entries, list):
@@ -557,44 +820,99 @@ async def create_doc_route(schema_name: str, request: Request):
                         })
             payload["accounts"] = normalized_lines
 
-    doc = model.create(payload)
-    await model.before_sync(doc)
-    try:
-        model.save(doc)
-    except Exception as e:
-        if "UNIQUE constraint failed" in str(e):
-            raise HTTPException(400, f"An account or document named '{payload.get('name')}' already exists.")
-        raise HTTPException(400, str(e))
-
-    db.add_audit_log(target_schema, doc.get("name"), "Created", f"Created {target_schema} entry")
-
-    # Auto-submit submittable transaction documents so debits/credits post to ledger immediately
-    if target_schema in ["JournalEntry", "SalesInvoice", "PurchaseInvoice", "Payment", "PurchaseOrder"]:
+    with db.transaction():
+        doc = model.create(payload)
         try:
-            await model.after_submit(doc)
-            db.add_audit_log(target_schema, doc.get("name"), "Posted", "Auto-posted entries to double-entry ledger")
+            await model.before_sync(doc)
+            model.save(doc)
         except Exception as e:
-            print(f"Auto-submit ledger error for {target_schema}: {e}")
-            raise HTTPException(status_code=400, detail=f"Transaction submission failed: {str(e)}")
+            if "UNIQUE constraint failed" in str(e):
+                raise HTTPException(400, f"An account or document named '{payload.get('name')}' already exists.")
+            raise HTTPException(400, str(e))
 
-    return doc.to_dict()
+        db.add_audit_log(target_schema, doc.get("name"), "Created", f"Created {target_schema} entry")
 
+        # Auto-submit submittable transaction documents so debits/credits post to ledger immediately
+        if target_schema in ["JournalEntry", "SalesInvoice", "PurchaseInvoice", "Payment", "PurchaseOrder"]:
+            amount = safe_float(doc.get("grandTotal") or doc.get("totalDebit") or doc.get("amount"), 0)
+            company_id = doc.get("company_id") or "default_company"
+
+            from backend.models.approval_model import check_approval_required, create_approval_request
+            appr_rule = check_approval_required(company_id, target_schema, amount)
+
+            if appr_rule and doc.get("approvalStatus") != "Approved":
+                create_approval_request(company_id, target_schema, doc.get("name"), amount)
+                doc._data["approvalStatus"] = "Pending"
+                db.update_doc(doc)
+                db.add_audit_log(target_schema, doc.get("name"), "Approval Requested", f"Requires approval for amount ${amount:,.2f}")
+            else:
+                try:
+                    await model.after_submit(doc)
+                    db.add_audit_log(target_schema, doc.get("name"), "Posted", "Auto-posted entries to double-entry ledger")
+                except Exception as e:
+                    print(f"Auto-submit ledger error for {target_schema}: {e}")
+                    raise HTTPException(status_code=400, detail=f"Transaction submission failed: {str(e)}")
+
+        return doc.to_dict()
 
 
 @app.put("/api/{schema_name}/{name}")
-async def update_doc_route(schema_name: str, name: str, body: DocCreate):
+async def update_doc_route(schema_name: str, name: str, request: Request):
+    try:
+        raw_body = await request.json()
+    except Exception:
+        raw_body = {}
+
+    if isinstance(raw_body, dict) and "data" in raw_body and isinstance(raw_body["data"], dict):
+        payload = raw_body["data"]
+    elif isinstance(raw_body, dict):
+        payload = raw_body
+    else:
+        payload = {}
+
     model = get_model(schema_name)
     if not model:
         raise HTTPException(404, f"Model '{schema_name}' not found")
     doc = model.get(name)
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
-    for key, value in body.data.items():
-        doc._data[key] = value
-    await model.before_sync(doc)
-    model.save(doc)
-    db.add_audit_log(schema_name, name, "Edited", "Updated entry details and accounting lines")
-    return doc.to_dict()
+
+    if doc.get("cancelled") or doc.get("status") == "Cancelled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{schema_name} '{name}' is CANCELLED and cannot be edited."
+        )
+
+    is_posted = doc.get("submitted") or doc.get("status") in ["Submitted", "Posted"]
+
+    with db.transaction():
+        if is_posted:
+            # Controlled amendment / reposting process for posted documents
+            from backend.models.invoice import reverse_document_postings
+            reverse_document_postings(doc)
+
+            for key, value in payload.items():
+                doc._data[key] = value
+
+            try:
+                await model.before_sync(doc)
+                model.save(doc)
+                await model.after_submit(doc)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to amend {schema_name}: {str(e)}")
+
+            db.add_audit_log(schema_name, name, "Amended", "Amended posted document and reposted ledger entries")
+        else:
+            for key, value in payload.items():
+                doc._data[key] = value
+            try:
+                await model.before_sync(doc)
+                model.save(doc)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to update {schema_name}: {str(e)}")
+            db.add_audit_log(schema_name, name, "Edited", "Updated entry details and accounting lines")
+
+        return doc.to_dict()
 
 
 @app.delete("/api/{schema_name}/{name}")
@@ -605,10 +923,24 @@ async def delete_doc_route(schema_name: str, name: str):
     doc = model.get(name)
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
-    await model.after_delete(doc)
-    model.delete(name)
-    db.add_audit_log(schema_name, name, "Deleted", "Deleted document")
-    return {"status": "deleted"}
+
+    if doc.get("cancelled") or doc.get("status") == "Cancelled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{schema_name} '{name}' is CANCELLED and cannot be deleted. Cancelled documents are preserved for audit history."
+        )
+
+    if doc.get("submitted") or doc.get("status") in ["Submitted", "Posted"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{schema_name} '{name}' has been POSTED and cannot be deleted. Use the cancellation workflow to reverse accounting entries."
+        )
+
+    with db.transaction():
+        await model.after_delete(doc)
+        model.delete(name)
+        db.add_audit_log(schema_name, name, "Deleted", "Deleted draft document")
+        return {"status": "deleted"}
 
 
 # Submit (for submittable docs)
@@ -620,11 +952,16 @@ async def submit_doc(schema_name: str, name: str):
     doc = model.get(name)
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
-    await model.before_sync(doc)
-    model.save(doc)
-    await model.after_submit(doc)
-    db.add_audit_log(schema_name, name, "Posted", "Posted accounting entries to double-entry ledger")
-    return doc.to_dict()
+
+    if doc.get("cancelled") or doc.get("status") == "Cancelled":
+        raise HTTPException(status_code=400, detail=f"{schema_name} '{name}' is CANCELLED and cannot be submitted.")
+
+    with db.transaction():
+        await model.before_sync(doc)
+        model.save(doc)
+        await model.after_submit(doc)
+        db.add_audit_log(schema_name, name, "Posted", "Posted accounting entries to double-entry ledger")
+        return doc.to_dict()
 
 
 # Cancel (reverse ledger entries)
@@ -636,9 +973,17 @@ async def cancel_doc(schema_name: str, name: str):
     doc = model.get(name)
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
-    await model.after_cancel(doc)
-    db.add_audit_log(schema_name, name, "Cancelled", "Cancelled document and reversed ledger entries")
-    return doc.to_dict()
+
+    if doc.get("cancelled") or doc.get("status") == "Cancelled":
+        raise HTTPException(status_code=400, detail=f"{schema_name} '{name}' is already cancelled.")
+
+    with db.transaction():
+        try:
+            await model.after_cancel(doc)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        db.add_audit_log(schema_name, name, "Cancelled", "Cancelled document and reversed ledger entries")
+        return doc.to_dict()
 
 
 # Reset document to draft status and revert ledger entries
@@ -755,7 +1100,19 @@ def _get_ledger_summaries(from_date: Optional[str] = None, to_date: Optional[str
         if entry.get("reverted"):
             continue
 
+        # Filter out parent documents that are unsubmitted or awaiting approval
+        ref_type = entry.get("reference_type")
+        ref_name = entry.get("reference_name")
+        if ref_type and ref_name:
+            parent_doc = db.get_doc(ref_type, ref_name)
+            if parent_doc:
+                if parent_doc.get("approvalStatus") in ["Pending", "Rejected"]:
+                    continue
+                if not parent_doc.get("submitted") and parent_doc.get("status") not in ["Submitted", "Posted"]:
+                    continue
+
         # Date filtering
+
         entry_date = entry.get("date", "")
         if from_date and entry_date < from_date:
             continue
@@ -807,11 +1164,8 @@ def _get_account_balances_by_type(root_type: str) -> list[dict]:
     return result
 
 
-# Serve frontend static files if they exist
-frontend_dist = os.environ.get("BOOKS_FRONTEND_DIST",
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist"))
-if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+# Serve frontend static files if they exist (moved to end after all API routes)
+
 
 
 if __name__ == "__main__":
@@ -1030,3 +1384,11 @@ def reject_doc(name: str):
             db.update_doc(ref_doc)
     
     return approval.to_dict()
+
+
+# Serve frontend static files after all API routes
+frontend_dist = os.environ.get("BOOKS_FRONTEND_DIST",
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist"))
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+

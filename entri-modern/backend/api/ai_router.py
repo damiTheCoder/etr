@@ -643,12 +643,34 @@ def _execute_create_journal_entry(entries: list, remark: str = ""):
         "userRemark": remark,
         "totalDebit": total_debit,
         "totalCredit": total_credit,
-        "submitted": 0,
-        "status": "Draft",
+        "submitted": 1,
+        "status": "Submitted",
         "accounts": formatted_accounts
     })
     doc._not_inserted = True
     db.insert_doc(doc)
+
+    # Post to ledger via LedgerPosting
+    try:
+        from backend.core.schema_engine import LedgerPosting
+        from backend.models.invoice import _save_ledger_entry
+        from backend.coa import resolve_account_name
+
+        posting = LedgerPosting(doc)
+        for line in formatted_accounts:
+            acct = resolve_account_name(line.get("account", ""))
+            deb = float(line.get("debit", 0))
+            cred = float(line.get("credit", 0))
+            if acct:
+                if deb > 0:
+                    posting.debit(acct, deb)
+                if cred > 0:
+                    posting.credit(acct, cred)
+        posting.validate()
+        for entry in posting.get_entries():
+            _save_ledger_entry(entry)
+    except Exception as e:
+        print(f"Ledger posting error for {jv_name}: {e}")
 
     return {
         "success": True,
@@ -657,9 +679,9 @@ def _execute_create_journal_entry(entries: list, remark: str = ""):
         "jv_name": jv_name,
         "total_debit": total_debit,
         "total_credit": total_credit,
-        "status": "Draft",
-        "requires_action": True,
-        "message": f"Journal Entry {jv_name} created as Draft. Please choose whether to Submit to Ledger or Keep as Draft."
+        "status": "Submitted",
+        "accounts": formatted_accounts,
+        "message": f"Journal Entry {jv_name} created and posted to ledger."
     }
 
 def _execute_get_purchase_orders(supplier: str = "", limit: int = 10):
@@ -737,8 +759,8 @@ def _execute_create_item(item_code: str, item_name: str = "", rate: float = 0.0,
     return {"success": True, "item_code": item_code, "rate": rate, "message": f"Item {item_code} created successfully."}
 
 def _execute_get_accounts():
-    from backend.main import get_accounts_tree
-    return get_accounts_tree()
+    from backend.main import get_account_tree
+    return get_account_tree()
 
 def _execute_get_dashboard_metrics(period: str = "monthly"):
     from backend.main import profit_and_loss
@@ -754,7 +776,7 @@ def _execute_get_balance_sheet():
 
 def _execute_get_general_ledger(account: str = "", limit: int = 20):
     from backend.main import general_ledger
-    return general_ledger(account_name=account if account else None)
+    return general_ledger(account=account if account else None)
 
 def _execute_get_trial_balance():
     from backend.main import trial_balance
@@ -820,10 +842,130 @@ def _local_fast_route_matcher(text: str):
     return None
 
 
+import re
+
+def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: Optional[str] = None) -> str:
+    """
+    Central response formatter.
+    Formats agent tool execution results into clean human-readable Markdown.
+    Propagates error messages verbatim starting with ❌ without returning empty/zero fallbacks.
+    """
+    if error or (isinstance(result, dict) and result.get("error")):
+        err_msg = error or result.get("error")
+        return f"❌ Tool '{tool_name}' failed: {err_msg}"
+    
+    if not result:
+        return f"✅ Tool '{tool_name}' executed successfully."
+
+    if not isinstance(result, dict):
+        return str(result)
+
+    # Format specific tool outputs into Markdown
+    if tool_name == "create_journal_entry" or result.get("schema_name") == "JournalEntry" or "jv_name" in result:
+        jv = result.get("jv_name") or result.get("doc_name") or "JV Entry"
+        td = result.get("total_debit", result.get("total_credit", 0.0))
+        status = result.get("status", "Draft")
+        msg = result.get("message", "")
+        accs = result.get("accounts", [])
+        acc_details = []
+        for a in accs:
+            acc_name = a.get("account", "Account")
+            deb = a.get("debit", 0)
+            cred = a.get("credit", 0)
+            if deb > 0:
+                acc_details.append(f"{acc_name} (Debit ${deb:,.2f})")
+            elif cred > 0:
+                acc_details.append(f"{acc_name} (Credit ${cred:,.2f})")
+        acc_str = ", ".join(acc_details) if acc_details else ""
+        res_text = (
+            f"✅ **Recorded Journal Entry `{jv}`**\n"
+            f"- **Status**: {status}\n"
+            f"- **Total Amount**: ${td:,.2f}"
+        )
+        if acc_str:
+            res_text += f"\n- **Accounts**: {acc_str}"
+        if msg:
+            res_text += f"\n\n{msg}"
+        return res_text
+
+    if tool_name == "get_profit_and_loss":
+        inc = result.get("income", {}).get("total", 0.0)
+        exp = result.get("expenses", {}).get("total", 0.0)
+        np = result.get("netProfit", 0.0)
+        npm = result.get("netProfitMargin", 0.0)
+        return (
+            f"### 📊 Profit & Loss Summary\n"
+            f"| Metric | Amount |\n"
+            f"| :--- | :--- |\n"
+            f"| **Total Income** | ${inc:,.2f} |\n"
+            f"| **Total Expenses** | ${exp:,.2f} |\n"
+            f"| **Net Profit** | **${np:,.2f}** |\n"
+            f"| **Net Profit Margin** | {npm}% |"
+        )
+
+    if tool_name == "get_dashboard_metrics":
+        inc = result.get("total_revenue", 0.0) or result.get("income", {}).get("total", 0.0)
+        exp = result.get("total_expenses", 0.0) or result.get("expenses", {}).get("total", 0.0)
+        np = result.get("net_profit", 0.0) or result.get("netProfit", 0.0)
+        return (
+            f"### 📈 Accounting Metrics Overview\n"
+            f"- **Total Revenue**: ${inc:,.2f}\n"
+            f"- **Total Expenses**: ${exp:,.2f}\n"
+            f"- **Net Profit**: ${np:,.2f}"
+        )
+
+    if tool_name == "get_balance_sheet":
+        ast = result.get("assets", {}).get("total", 0.0)
+        liab = result.get("liabilities", {}).get("total", 0.0)
+        eq = result.get("equity", {}).get("total", 0.0)
+        return (
+            f"### ⚖️ Balance Sheet Statement\n"
+            f"- **Total Assets**: ${ast:,.2f}\n"
+            f"- **Total Liabilities**: ${liab:,.2f}\n"
+            f"- **Total Equity**: ${eq:,.2f}"
+        )
+
+    if "message" in result:
+        return f"✅ {result['message']}"
+
+    return f"✅ Tool '{tool_name}' completed."
+
+
+def _find_matching_expense_account(query_term: str = "") -> Optional[str]:
+    """Finds an appropriate expense account from the Chart of Accounts matching query_term, or settings default."""
+    accounts = db.get_all_docs("Account")
+    # Filter to Expense accounts
+    expense_accs = [acc for acc in accounts if acc.get("accountType") == "Expense" or acc.get("rootType") == "Expense"]
+    
+    if not expense_accs:
+        expense_accs = [acc for acc in accounts if "Expense" in acc.get("name", "") or "Expense" in acc.get("accountName", "")]
+        
+    if not expense_accs:
+        return None
+
+    # 1. Search for word matches in query_term (e.g. "rent", "utilities")
+    if query_term:
+        words = [w.lower() for w in query_term.split() if len(w) > 2]
+        for acc in expense_accs:
+            acc_name = (acc.get("accountName") or acc.get("name") or "").lower()
+            if any(w in acc_name for w in words):
+                return acc.get("name") or acc.get("accountName")
+
+    # 2. Check settings for default purchase/expense account
+    settings = db.get_doc("CompanySettings", "default_settings")
+    if settings and settings.get("defaultExpenseAccount"):
+        return settings.get("defaultExpenseAccount")
+
+    # 3. Fallback to first available Expense account in COA
+    first_exp = expense_accs[0]
+    return first_exp.get("name") or first_exp.get("accountName")
+
+
 def _local_fallback_intent_executor(user_text: str):
     """
     Local deterministic accounting NLP intent processor.
     Matches queries to accounting tools directly when offline, rate-limited, or fallback.
+    Enforces 2-signal transaction validation (verb + number) and explicit error reporting.
     """
     t = user_text.strip().lower()
 
@@ -839,6 +981,45 @@ def _local_fallback_intent_executor(user_text: str):
                 "arguments": {"page_route": matched_route},
                 "result": nav_res
             }]
+        }
+
+    # Signal 1: Past-tense transaction verbs
+    transaction_verbs = ["paid", "spent", "bought", "received", "sold", "invoiced", "refunded", "recorded", "posted"]
+    matched_verb = next((v for v in transaction_verbs if v in t.split() or t.startswith(v)), None)
+
+    # Signal 2: Numeric amount
+    num_match = re.search(r'(\b\d+(?:\.\d+)?\b)', t)
+
+    # TWO-SIGNAL TRANSACTION CREATION RULE:
+    # Requires BOTH a transaction verb AND a numeric amount to create a journal entry.
+    if matched_verb and num_match:
+        amount = float(num_match.group(1))
+        # Extract category text by stripping verb and number
+        clean_desc = re.sub(r'\b\d+(?:\.\d+)?\b', '', t)
+        for verb in transaction_verbs:
+            clean_desc = clean_desc.replace(verb, '')
+        category_hint = clean_desc.strip() or "General Expense"
+
+        expense_account = _find_matching_expense_account(category_hint)
+        if not expense_account:
+            err_msg = f"Could not find an expense account matching '{category_hint}' in your Chart of Accounts. Please specify an account."
+            return {
+                "role": "assistant",
+                "content": f"❌ Transaction creation failed: {err_msg}",
+                "executed_tools": [{"name": "create_journal_entry", "arguments": {}, "result": {"error": err_msg}}]
+            }
+
+        # Create Journal Entry: Debit Expense Account, Credit Bank
+        entries = [
+            {"account": expense_account, "debit": amount, "credit": 0.0},
+            {"account": "Bank", "debit": 0.0, "credit": amount}
+        ]
+        res = _execute_create_journal_entry(entries=entries, remark=f"{matched_verb.capitalize()} {category_hint.title()}")
+        formatted_content = format_agent_response("create_journal_entry", {"entries": entries}, res)
+        return {
+            "role": "assistant",
+            "content": formatted_content,
+            "executed_tools": [{"name": "create_journal_entry", "arguments": {"entries": entries, "remark": category_hint}, "result": res}]
         }
 
     # Customers & Parties
@@ -926,47 +1107,22 @@ def _local_fallback_intent_executor(user_text: str):
             "executed_tools": [{"name": "get_journal_entries", "arguments": {}, "result": res}]
         }
 
-    # Purchase Orders
-    if "purchase order" in t or "order" in t or "po-" in t:
-        res = _execute_get_purchase_orders()
-        return {
-            "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('orders', [])))} purchase order(s).",
-            "executed_tools": [{"name": "get_purchase_orders", "arguments": {}, "result": res}]
-        }
-
-    # Items / Inventory
-    if "item" in t or "product" in t or "stock" in t or "inventory" in t:
-        res = _execute_get_items()
-        return {
-            "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('items', [])))} item(s) from catalog.",
-            "executed_tools": [{"name": "get_items", "arguments": {}, "result": res}]
-        }
-
-    # Accounts / COA
-    if "account" in t or "coa" in t or "chart of accounts" in t:
-        res = _execute_get_accounts()
-        return {
-            "role": "assistant",
-            "content": f"Retrieved Chart of Accounts.",
-            "executed_tools": [{"name": "get_accounts", "arguments": {}, "result": res}]
-        }
-
     # Financial Reports & Metrics
     if any(k in t for k in ["profit", "loss", "p&l", "income", "expense", "revenue"]):
         res = _execute_get_profit_and_loss()
+        formatted_content = format_agent_response("get_profit_and_loss", {}, res)
         return {
             "role": "assistant",
-            "content": f"Calculated Profit & Loss summary. Total Income: {res.get('income', {}).get('total', 0)}, Total Expenses: {res.get('expenses', {}).get('total', 0)}, Net Profit: {res.get('netProfit', 0)}.",
+            "content": formatted_content,
             "executed_tools": [{"name": "get_profit_and_loss", "arguments": {}, "result": res}]
         }
 
     if "balance sheet" in t:
         res = _execute_get_balance_sheet()
+        formatted_content = format_agent_response("get_balance_sheet", {}, res)
         return {
             "role": "assistant",
-            "content": "Retrieved Balance Sheet statement.",
+            "content": formatted_content,
             "executed_tools": [{"name": "get_balance_sheet", "arguments": {}, "result": res}]
         }
 
@@ -994,12 +1150,11 @@ def _local_fallback_intent_executor(user_text: str):
             "executed_tools": [{"name": "get_aging_report", "arguments": {}, "result": res}]
         }
 
-    # Fallback default summary
-    metrics = _execute_get_dashboard_metrics()
+    # Clarification prompt when intent is ambiguous (never auto-fallback to empty zero P&L)
     return {
         "role": "assistant",
-        "content": "Here is an overview of your current accounting metrics.",
-        "executed_tools": [{"name": "get_dashboard_metrics", "arguments": {}, "result": metrics}]
+        "content": "I am your entri AI accounting assistant. Please specify if you would like to **record a transaction** (e.g. *'paid shop rent 2500'*), or **query a report** (e.g. *'show P&L'*).",
+        "executed_tools": []
     }
 
 
@@ -1026,15 +1181,16 @@ async def ai_chat_endpoint(req: ChatRequest):
     system_prompt = {
         "role": "system",
         "content": (
-            "You are entri AI accounting assistant. Your responses must be neat, professional, and structured. "
-            "When summarizing financial figures, performance metrics, lists of transactions, or accounting data, format them cleanly in markdown table format. "
-            "Do NOT use raw markdown asterisks (**) or raw markdown syntax symbols in plain text. "
-            "Available tools: get_customers, get_parties, create_party, get_sales_invoices, "
-            "create_sales_invoice, get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, "
-            "get_journal_entries, create_journal_entry, get_purchase_orders, create_purchase_order, get_items, "
-            "create_item, get_accounts, get_dashboard_metrics, get_profit_and_loss, get_balance_sheet, get_general_ledger, "
-            "get_trial_balance, get_aging_report, navigate_to_page. "
-            "Call the appropriate tool with arguments when helpful."
+            "You are entri AI accounting assistant. Follow these strict rules:\n"
+            "1. If the user describes a transaction that occurred (keywords: paid, spent, received, bought, sold, invoiced, refunded), "
+            "you MUST call the `create_journal_entry` tool (or document creation tool). Never respond with a report.\n"
+            "2. If the user asks a question about finances (keywords: show, report, how much, P&L, balance sheet), "
+            "you MUST call the appropriate reporting tool.\n"
+            "3. If a tool call fails, return the error verbatim. Do NOT return empty or zero-value reports as a fallback.\n"
+            "Available tools: get_customers, get_parties, create_party, get_sales_invoices, create_sales_invoice, "
+            "get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, get_journal_entries, "
+            "create_journal_entry, get_purchase_orders, create_purchase_order, get_items, create_item, get_accounts, "
+            "get_dashboard_metrics, get_profit_and_loss, get_balance_sheet, get_general_ledger, get_trial_balance, get_aging_report, navigate_to_page."
         )
     }
     
@@ -1046,7 +1202,6 @@ async def ai_chat_endpoint(req: ChatRequest):
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # 1-2 Turn lightweight execution
             for step in range(3):
                 body = {
                     "model": model_id,
@@ -1149,21 +1304,47 @@ async def ai_chat_endpoint(req: ChatRequest):
                             "content": json.dumps(tool_output)
                         })
                 else:
+                    raw_content = msg.get("content", "").strip()
+                    if raw_content.startswith("{") and raw_content.endswith("}"):
+                        try:
+                            parsed_json = json.loads(raw_content)
+                            raw_content = format_agent_response("tool_result", {}, parsed_json)
+                        except Exception:
+                            pass
                     return {
                         "role": "assistant",
-                        "content": msg.get("content", ""),
+                        "content": raw_content,
                         "executed_tools": executed_tool_results
                     }
 
+            last_res = executed_tool_results[-1] if executed_tool_results else None
+            final_content = ""
+            if last_res:
+                final_content = format_agent_response(
+                    last_res.get("name", ""),
+                    last_res.get("arguments", {}),
+                    last_res.get("result")
+                )
+            else:
+                final_content = full_messages[-1].get("content", "Task executed successfully.")
+
+            if final_content.strip().startswith("{") and final_content.strip().endswith("}"):
+                try:
+                    parsed_json = json.loads(final_content.strip())
+                    final_content = format_agent_response("tool_result", {}, parsed_json)
+                except Exception:
+                    pass
+
             return {
                 "role": "assistant",
-                "content": full_messages[-1].get("content", "Task executed successfully."),
+                "content": final_content,
                 "executed_tools": executed_tool_results
             }
 
     except Exception as api_err:
         print(f"OpenRouter connection error ({api_err}), executing deterministic local intent handler.")
         return _local_fallback_intent_executor(last_user_msg)
+
 
 
 class DocSubmitRequest(BaseModel):

@@ -89,22 +89,35 @@ class InvoiceModel(BaseModel):
 
                 qty = safe_float(item.get("quantity"), 1)
                 rate = safe_float(item.get("rate"), 0)
-                amount = qty * rate
+                amount = round(qty * rate, 2)
                 item["amount"] = amount
-                base_amount = amount * safe_float(doc.get("exchangeRate"), 1)
+                base_amount = round(amount * safe_float(doc.get("exchangeRate"), 1), 2)
                 item["baseAmount"] = base_amount
                 net_total += amount
 
+        net_total = round(net_total, 2)
         doc._data["netTotal"] = net_total
 
-        # Apply discount
+        # Apply discount & validation
         discount = safe_float(doc.get("discountAmount"), 0)
         discount_pct = safe_float(doc.get("discountPercent"), 0)
+
+        if discount < 0 or discount_pct < 0:
+            raise ValueError("Discount cannot be negative")
+        if discount_pct > 100:
+            raise ValueError("Discount percentage cannot exceed 100%")
+
         if discount_pct > 0 and net_total > 0:
-            discount = net_total * (discount_pct / 100)
+            discount = round(net_total * (discount_pct / 100), 2)
+            doc._data["discountAmount"] = discount
+        else:
+            discount = round(discount, 2)
             doc._data["discountAmount"] = discount
 
-        discounted_total = net_total - discount
+        if discount > net_total:
+            raise ValueError("Discount amount cannot exceed item subtotal")
+
+        discounted_total = round(net_total - discount, 2)
 
         # Compute taxes
         tax_total = 0.0
@@ -113,16 +126,17 @@ class InvoiceModel(BaseModel):
             for tax_row in taxes_data:
                 if isinstance(tax_row, dict):
                     tax_rate = safe_float(tax_row.get("rate"), 0)
-                    tax_amount = discounted_total * (tax_rate / 100)
+                    tax_amount = round(discounted_total * (tax_rate / 100), 2)
                     tax_row["amount"] = tax_amount
                     tax_total += tax_amount
 
+        tax_total = round(tax_total, 2)
         doc._data["taxTotal"] = tax_total
-        grand_total = discounted_total + tax_total
+        grand_total = round(discounted_total + tax_total, 2)
         doc._data["grandTotal"] = grand_total
 
         exchange_rate = safe_float(doc.get("exchangeRate"), 1)
-        doc._data["baseGrandTotal"] = grand_total * exchange_rate
+        doc._data["baseGrandTotal"] = round(grand_total * exchange_rate, 2)
 
         if not doc.get("submitted"):
             doc._data["outstandingAmount"] = grand_total
@@ -133,58 +147,77 @@ class InvoiceModel(BaseModel):
 
         is_sales = doc.schema_name == "SalesInvoice"
         exchange_rate = safe_float(doc.get("exchangeRate"), 1)
-        base_grand_total = safe_float(doc.get("baseGrandTotal"), 0)
+        base_grand_total = round(safe_float(doc.get("baseGrandTotal"), 0), 2)
+        net_total = round(safe_float(doc.get("netTotal"), 0) * exchange_rate, 2)
+        discount = round(safe_float(doc.get("discountAmount"), 0) * exchange_rate, 2)
+        tax_total = round(safe_float(doc.get("taxTotal"), 0) * exchange_rate, 2)
+
+        from backend.coa import resolve_account_name
 
         if is_sales:
-            # Debit Debtors (Receivable) — Asset increases
-            posting.debit("Debtors", base_grand_total)
+            receivable_acct = resolve_account_name(db.get_single_value("default_receivable_account") or "Debtors")
+            discount_acct = resolve_account_name(db.get_single_value("default_discount_account") or "Discount Allowed")
+            tax_acct = resolve_account_name(db.get_single_value("default_tax_payable_account") or "Output Tax Payable")
 
-            # Credit Sales (Income) for each item — Income increases
-            net_total = safe_float(doc.get("netTotal"), 0) * exchange_rate
-            discount = safe_float(doc.get("discountAmount"), 0) * exchange_rate
-            discounted_total = net_total - discount
+            # Debit Debtors (Receivable) for Net Grand Total
+            if base_grand_total > 0:
+                posting.debit(receivable_acct, base_grand_total)
 
+            # Debit Discount Allowed for Discount Amount
+            if discount > 0:
+                posting.debit(discount_acct, discount)
+
+            # Credit Sales for Gross Item Subtotal
             items_data = doc.get("items", [])
             if items_data:
-                for item in items_data:
+                item_credits_sum = 0.0
+                for idx, item in enumerate(items_data):
                     if isinstance(item, dict):
-                        account = item.get("account", "Sales")
+                        account = resolve_account_name(item.get("account") or "Sales")
                         item_base = item.get("baseAmount")
                         item_amt = item.get("amount")
-                        amount = safe_float(item_base if item_base is not None else item_amt, 0)
+                        amount = round(safe_float(item_base if item_base is not None else item_amt, 0) * exchange_rate, 2)
+                        if idx == len(items_data) - 1:
+                            amount = round(net_total - item_credits_sum, 2)
                         if amount > 0:
                             posting.credit(account, amount)
+                            item_credits_sum += amount
             else:
-                posting.credit("Sales", discounted_total)
+                if net_total > 0:
+                    posting.credit("Sales", net_total)
 
-            # Credit Output Tax Payable — Liability increases
-            tax_total = safe_float(doc.get("taxTotal"), 0) * exchange_rate
+            # Credit Output Tax Payable
             if tax_total > 0:
-                posting.credit("Output Tax Payable", tax_total)
+                posting.credit(tax_acct, tax_total)
 
         else:
             # Purchase Invoice
-            # Credit Creditors (Payable) — Liability increases
-            posting.credit("Creditors", base_grand_total)
+            payable_acct = resolve_account_name(db.get_single_value("default_payable_account") or "Creditors")
+            tax_acct = resolve_account_name(db.get_single_value("default_tax_receivable_account") or "Input Tax Credit")
 
-            # Debit COGS/Expense accounts — Expense increases
+            if base_grand_total > 0:
+                posting.credit(payable_acct, base_grand_total)
+
             items_data = doc.get("items", [])
             if items_data:
-                for item in items_data:
+                item_debits_sum = 0.0
+                for idx, item in enumerate(items_data):
                     if isinstance(item, dict):
-                        account = item.get("account", "Cost of Goods Sold")
+                        account = resolve_account_name(item.get("account") or "Cost of Goods Sold")
                         item_base = item.get("baseAmount")
                         item_amt = item.get("amount")
-                        amount = safe_float(item_base if item_base is not None else item_amt, 0)
+                        amount = round(safe_float(item_base if item_base is not None else item_amt, 0) * exchange_rate, 2)
+                        if idx == len(items_data) - 1:
+                            amount = round(net_total - item_debits_sum, 2)
                         if amount > 0:
                             posting.debit(account, amount)
+                            item_debits_sum += amount
             else:
-                posting.debit("Cost of Goods Sold", safe_float(doc.get("netTotal"), 0) * exchange_rate)
+                if net_total > 0:
+                    posting.debit("Cost of Goods Sold", net_total)
 
-            # Debit Input Tax Credit — Asset increases
-            tax_total = safe_float(doc.get("taxTotal"), 0) * exchange_rate
             if tax_total > 0:
-                posting.debit("Input Tax Credit", tax_total)
+                posting.debit(tax_acct, tax_total)
 
         posting.validate()
         for entry in posting.get_entries():
@@ -192,18 +225,54 @@ class InvoiceModel(BaseModel):
 
         doc._data["submitted"] = True
         doc._data["cancelled"] = False
+        doc._data["status"] = "Submitted"
         db.update_doc(doc)
 
     async def after_cancel(self, doc: Doc):
-        """Reverse all ledger entries for this document."""
-        entries = db.get_ledger_entries()
-        for entry in entries:
-            if entry.get("reference_name") == doc.get("name"):
-                _reverse_ledger_entry(entry)
+        """Reverse all active ledger entries for this document."""
+        if doc.get("cancelled") or doc.get("status") == "Cancelled":
+            raise ValueError(f"{doc.schema_name} '{doc.get('name')}' is already cancelled.")
+
+        reverse_document_postings(doc)
 
         doc._data["submitted"] = False
         doc._data["cancelled"] = True
+        doc._data["status"] = "Cancelled"
+        doc._data["outstandingAmount"] = 0
         db.update_doc(doc)
+
+
+def reverse_document_postings(doc: Doc):
+    """
+    Reverse active (reverted = 0) ledger entries for a document.
+    Marks original entries as reverted = 1.
+    Creates reversal entries (swapped debit/credit) with reverted = 1 to preserve full audit history while removing active accounting impact.
+    """
+    conn = db.get_connection()
+    ref_type = doc.schema_name
+    ref_name = doc.get("name")
+    rows = conn.execute(
+        "SELECT * FROM AccountingLedgerEntry WHERE reference_type = ? AND reference_name = ? AND reverted = 0",
+        (ref_type, ref_name)
+    ).fetchall()
+    if not rows:
+        return
+
+    import uuid
+    for row in rows:
+        r_dict = dict(row)
+        conn.execute("UPDATE AccountingLedgerEntry SET reverted = 1 WHERE name = ?", (r_dict["name"],))
+        rev_name = str(uuid.uuid4())[:8]
+        dr = safe_float(r_dict.get("debit"), 0)
+        cr = safe_float(r_dict.get("credit"), 0)
+        conn.execute(
+            """INSERT INTO AccountingLedgerEntry
+               (name, account, party, date, debit, credit, reference_type, reference_name, reverted)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+             (rev_name, r_dict["account"], r_dict.get("party") or "", r_dict.get("date"),
+              cr, dr, ref_type, ref_name)
+        )
+    db.commit_if_not_in_transaction()
 
 
 def _save_ledger_entry(entry) -> str:
@@ -233,7 +302,7 @@ def _save_ledger_entry(entry) -> str:
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
         (name, acct, getattr(entry, "party", "") or "", dt, dr, cr, ref_type, ref_name)
     )
-    conn.commit()
+    db.commit_if_not_in_transaction()
     return name
 
 
@@ -250,5 +319,6 @@ def _reverse_ledger_entry(entry: dict):
          safe_float(entry.get("credit"), 0), safe_float(entry.get("debit"), 0),
          entry.get("reference_type", ""), entry.get("reference_name", ""))
     )
-    conn.commit()
+    db.commit_if_not_in_transaction()
+
 

@@ -5,22 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { 
-  Building2, 
-  Coins, 
-  Calendar, 
-  Receipt, 
-  CreditCard, 
-  Wallet, 
-  Building, 
-  CheckCircle2, 
-  AlertCircle, 
-  Save, 
-  RefreshCw, 
-  Sliders, 
-  ShieldCheck,
-  Scale
-} from 'lucide-react'
+import { useCompany } from '../context/CompanyContext'
 
 function ensureString(val: any, fallback: string = ''): string {
   if (val === null || val === undefined) return fallback
@@ -43,10 +28,29 @@ function ensureString(val: any, fallback: string = ''): string {
   return String(val)
 }
 
+function extractState(data: any): Record<string, any> {
+  return {
+    company_name: data.company?.name ?? data.company_name ?? 'My Company',
+    base_currency: data.company?.base_currency ?? data.base_currency ?? 'NGN',
+    fiscal_year_start: String(data.company?.fiscal_year_start ?? data.fiscal_year_start ?? 1),
+    fiscal_year_end: String(data.company?.fiscal_year_end ?? data.fiscal_year_end ?? 12),
+    default_sales_income_account_id: data.defaults?.sales_income?.id ?? data.default_sales_income_account_id ?? 'Sales',
+    default_purchase_expense_account_id: data.defaults?.purchase_expense?.id ?? data.default_purchase_expense_account_id ?? 'Cost of Goods Sold',
+    default_receivable_account_id: data.defaults?.receivable?.id ?? data.default_receivable_account_id ?? 'Debtors',
+    default_payable_account_id: data.defaults?.payable?.id ?? data.default_payable_account_id ?? 'Creditors',
+    default_cash_account_id: data.defaults?.cash?.id ?? data.default_cash_account_id ?? 'Cash',
+    default_bank_account_id: data.defaults?.bank?.id ?? data.default_bank_account_id ?? 'Bank',
+    round_off_account_id: data.defaults?.round_off?.id ?? data.round_off_account_id ?? 'Round Off',
+    discount_allowed_account_id: data.defaults?.discount_allowed?.id ?? data.discount_allowed_account_id ?? 'Discount Allowed',
+    stock_inventory_account_id: data.defaults?.stock_inventory?.id ?? data.stock_inventory_account_id ?? 'Stock in Hand',
+    depreciation_account_id: data.defaults?.depreciation?.id ?? data.depreciation_account_id ?? 'Depreciation',
+  }
+}
+
 export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
 
   const [allAccounts, setAllAccounts] = useState<any[]>([])
   const [incomeAccounts, setIncomeAccounts] = useState<any[]>([])
@@ -54,21 +58,13 @@ export default function Settings() {
   const [assetAccounts, setAssetAccounts] = useState<any[]>([])
   const [liabilityAccounts, setLiabilityAccounts] = useState<any[]>([])
 
-  const [companyName, setCompanyName] = useState('My Company')
-  const [currency, setCurrency] = useState('USD')
-  const [fiscalYearStart, setFiscalYearStart] = useState('1')
-  const [fiscalYearEnd, setFiscalYearEnd] = useState('12')
+  const [formData, setFormData] = useState<Record<string, any>>({})
+  const [initialData, setInitialData] = useState<Record<string, any>>({})
+  const [version, setVersion] = useState<number>(1)
 
-  const [defaultSalesAccount, setDefaultSalesAccount] = useState('Sales')
-  const [defaultPurchaseAccount, setDefaultPurchaseAccount] = useState('Cost of Goods Sold')
-  const [defaultReceivableAccount, setDefaultReceivableAccount] = useState('Debtors')
-  const [defaultPayableAccount, setDefaultPayableAccount] = useState('Creditors')
-  const [defaultCashAccount, setDefaultCashAccount] = useState('Cash')
-  const [defaultBankAccount, setDefaultBankAccount] = useState('Bank')
-  const [defaultRoundOffAccount, setDefaultRoundOffAccount] = useState('Round Off')
-  const [defaultDiscountAccount, setDefaultDiscountAccount] = useState('Discount Allowed')
-  const [defaultStockAccount, setDefaultStockAccount] = useState('Stock in Hand')
-  const [defaultDepreciationAccount, setDefaultDepreciationAccount] = useState('Depreciation')
+  const updateFormField = (key: string, value: any) => {
+    setFormData(prev => ({ ...prev, [key]: value }))
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -90,52 +86,14 @@ export default function Settings() {
         const liabilities = all.filter(a => a.rootType === 'Liability')
         setLiabilityAccounts(liabilities)
 
-        const [
-          cName,
-          curr,
-          fyStart,
-          fyEnd,
-          dSales,
-          dPurch,
-          dRec,
-          dPay,
-          dCash,
-          dBank,
-          dRound,
-          dDisc,
-          dStock,
-          dDep,
-        ] = await Promise.all([
-          api.getSingleValue('company_name'),
-          api.getSingleValue('currency'),
-          api.getSingleValue('fiscal_year_start'),
-          api.getSingleValue('fiscal_year_end'),
-          api.getSingleValue('default_sales_account'),
-          api.getSingleValue('default_purchase_account'),
-          api.getSingleValue('default_receivable_account'),
-          api.getSingleValue('default_payable_account'),
-          api.getSingleValue('default_cash_account'),
-          api.getSingleValue('default_bank_account'),
-          api.getSingleValue('default_round_off_account'),
-          api.getSingleValue('default_discount_account'),
-          api.getSingleValue('default_stock_account'),
-          api.getSingleValue('default_depreciation_account'),
-        ])
-
-        setCompanyName(ensureString(cName, 'My Company'))
-        setCurrency(ensureString(curr, 'USD'))
-        setFiscalYearStart(ensureString(fyStart, '1'))
-        setFiscalYearEnd(ensureString(fyEnd, '12'))
-        setDefaultSalesAccount(ensureString(dSales, 'Sales'))
-        setDefaultPurchaseAccount(ensureString(dPurch, 'Cost of Goods Sold'))
-        setDefaultReceivableAccount(ensureString(dRec, 'Debtors'))
-        setDefaultPayableAccount(ensureString(dPay, 'Creditors'))
-        setDefaultCashAccount(ensureString(dCash, 'Cash'))
-        setDefaultBankAccount(ensureString(dBank, 'Bank'))
-        setDefaultRoundOffAccount(ensureString(dRound, 'Round Off'))
-        setDefaultDiscountAccount(ensureString(dDisc, 'Discount Allowed'))
-        setDefaultStockAccount(ensureString(dStock, 'Stock in Hand'))
-        setDefaultDepreciationAccount(ensureString(dDep, 'Depreciation'))
+        const settingsRes = await fetch('/api/settings?company_id=default_company')
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          const state = extractState(settingsData)
+          setFormData(state)
+          setInitialData(state)
+          setVersion(settingsData.version ?? 1)
+        }
       } catch (e: any) {
         console.error('Failed to load settings:', e)
         setNotification({ type: 'error', message: 'Failed to load company preferences.' })
@@ -147,36 +105,70 @@ export default function Settings() {
     loadData()
   }, [])
 
+  const { refetchSettings } = useCompany()
+
   async function save(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     setNotification(null)
 
     try {
-      const entries: [string, string][] = [
-        ['company_name', ensureString(companyName)],
-        ['currency', ensureString(currency)],
-        ['fiscal_year_start', ensureString(fiscalYearStart)],
-        ['fiscal_year_end', ensureString(fiscalYearEnd)],
-        ['default_sales_account', ensureString(defaultSalesAccount)],
-        ['default_purchase_account', ensureString(defaultPurchaseAccount)],
-        ['default_receivable_account', ensureString(defaultReceivableAccount)],
-        ['default_payable_account', ensureString(defaultPayableAccount)],
-        ['default_cash_account', ensureString(defaultCashAccount)],
-        ['default_bank_account', ensureString(defaultBankAccount)],
-        ['default_round_off_account', ensureString(defaultRoundOffAccount)],
-        ['default_discount_account', ensureString(defaultDiscountAccount)],
-        ['default_stock_account', ensureString(defaultStockAccount)],
-        ['default_depreciation_account', ensureString(defaultDepreciationAccount)],
-      ]
+      const diff: Record<string, any> = {}
+      Object.keys(formData).forEach(k => {
+        if (formData[k] !== initialData[k]) {
+          if (k === 'fiscal_year_start' || k === 'fiscal_year_end') {
+            diff[k] = parseInt(formData[k], 10)
+          } else {
+            diff[k] = formData[k]
+          }
+        }
+      })
 
-      for (const [key, value] of entries) {
-        await api.setSingleValue(key, value)
+      if (Object.keys(diff).length === 0) {
+        setNotification({ type: 'info', message: 'No changes to save' })
+        setSaving(false)
+        return
       }
 
-      setNotification({ type: 'success', message: 'Settings saved successfully!' })
-      
-      // Auto-hide success notification after 4 seconds
+      diff.version = version
+
+      const res = await fetch('/api/settings?company_id=default_company', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(diff),
+      })
+
+      if (res.status === 409) {
+        setNotification({ type: 'error', message: 'Settings were changed elsewhere. Reloading...' })
+        const freshRes = await fetch('/api/settings?company_id=default_company')
+        if (freshRes.ok) {
+          const freshData = await freshRes.json()
+          const freshState = extractState(freshData)
+          setFormData(freshState)
+          setInitialData(freshState)
+          setVersion(freshData.version ?? 1)
+        }
+        setSaving(false)
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error('Failed to save settings')
+      }
+
+      const freshRes = await fetch('/api/settings?company_id=default_company')
+      if (freshRes.ok) {
+        const freshData = await freshRes.json()
+        const freshState = extractState(freshData)
+        setFormData(freshState)
+        setInitialData(freshState)
+        setVersion(freshData.version ?? (version + 1))
+      }
+
+      await refetchSettings()
+
+      setNotification({ type: 'success', message: 'Settings saved' })
+
       setTimeout(() => {
         setNotification(prev => prev?.type === 'success' ? null : prev)
       }, 4000)
@@ -214,7 +206,6 @@ export default function Settings() {
         </div>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-16 text-center text-slate-500 space-y-3">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-blue-600" />
             <p className="text-sm font-medium">Loading system preferences and default accounts...</p>
           </CardContent>
         </Card>
@@ -227,20 +218,13 @@ export default function Settings() {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl shadow-md shadow-blue-500/20">
-              <Sliders className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Settings</h1>
-              <p className="text-sm text-slate-500">Configure core company information and default accounting ledger mappings</p>
-            </div>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Settings</h1>
+          <p className="text-sm text-slate-500">Configure core company information and default accounting ledger mappings</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full">
-            <ShieldCheck className="w-3.5 h-3.5" /> Single Entry / Standard COA Active
+          <span className="inline-flex items-center px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full">
+            Single Entry / Standard COA Active
           </span>
         </div>
       </div>
@@ -254,17 +238,10 @@ export default function Settings() {
               : 'bg-rose-50 border-rose-200 text-rose-900'
           }`}
         >
-          <div className="flex items-center gap-3">
-            {notification.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-            )}
-            <p className="text-sm font-medium">{notification.message}</p>
-          </div>
+          <p className="text-sm font-medium">{notification.message}</p>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
+            className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors ml-4"
           >
             Dismiss
           </button>
@@ -275,10 +252,7 @@ export default function Settings() {
         {/* Company Profile Card */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-blue-600" />
-              <CardTitle className="text-lg font-semibold text-slate-900">Company Information</CardTitle>
-            </div>
+            <CardTitle className="text-lg font-semibold text-slate-900">Company Information</CardTitle>
             <CardDescription>Legal entity details and base reporting currency</CardDescription>
           </CardHeader>
 
@@ -288,8 +262,8 @@ export default function Settings() {
                 Company Name
               </Label>
               <Input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                value={formData.company_name ?? ''}
+                onChange={(e) => updateFormField('company_name', e.target.value)}
                 placeholder="e.g. Acme Corp Ltd."
                 className="bg-white border-slate-300 focus:border-blue-500 focus:ring-blue-500 font-medium"
                 required
@@ -298,14 +272,15 @@ export default function Settings() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5 text-amber-500" /> Base Currency
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Base Currency
                 </Label>
                 <NativeSelect
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
+                  value={formData.base_currency ?? 'NGN'}
+                  onChange={(e) => updateFormField('base_currency', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
+                  <option value="NGN">NGN (₦)</option>
                   <option value="USD">USD ($)</option>
                   <option value="EUR">EUR (€)</option>
                   <option value="GBP">GBP (£)</option>
@@ -319,12 +294,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-blue-500" /> Fiscal Year Start
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Fiscal Year Start
                 </Label>
                 <NativeSelect
-                  value={fiscalYearStart}
-                  onChange={(e) => setFiscalYearStart(e.target.value)}
+                  value={formData.fiscal_year_start ?? '1'}
+                  onChange={(e) => updateFormField('fiscal_year_start', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   {monthNames.map((m) => (
@@ -336,12 +311,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-500" /> Fiscal Year End
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Fiscal Year End
                 </Label>
                 <NativeSelect
-                  value={fiscalYearEnd}
-                  onChange={(e) => setFiscalYearEnd(e.target.value)}
+                  value={formData.fiscal_year_end ?? '12'}
+                  onChange={(e) => updateFormField('fiscal_year_end', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   {monthNames.map((m) => (
@@ -358,22 +333,19 @@ export default function Settings() {
         {/* Primary Default Accounts Card */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-indigo-600" />
-              <CardTitle className="text-lg font-semibold text-slate-900">Default Transaction Accounts</CardTitle>
-            </div>
+            <CardTitle className="text-lg font-semibold text-slate-900">Default Transaction Accounts</CardTitle>
             <CardDescription>Default ledger accounts assigned automatically during invoice & payment processing</CardDescription>
           </CardHeader>
 
           <CardContent className="pt-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5 text-emerald-600" /> Default Sales / Income Account
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Default Sales / Income Account
                 </Label>
                 <NativeSelect
-                  value={defaultSalesAccount}
-                  onChange={(e) => setDefaultSalesAccount(e.target.value)}
+                  value={formData.default_sales_income_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_sales_income_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Sales Account...</option>
@@ -391,12 +363,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-rose-600" /> Default Purchase / Expense Account
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Default Purchase / Expense Account
                 </Label>
                 <NativeSelect
-                  value={defaultPurchaseAccount}
-                  onChange={(e) => setDefaultPurchaseAccount(e.target.value)}
+                  value={formData.default_purchase_expense_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_purchase_expense_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Purchase Account...</option>
@@ -414,12 +386,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Wallet className="w-3.5 h-3.5 text-sky-600" /> Accounts Receivable (Debtors)
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Accounts Receivable (Debtors)
                 </Label>
                 <NativeSelect
-                  value={defaultReceivableAccount}
-                  onChange={(e) => setDefaultReceivableAccount(e.target.value)}
+                  value={formData.default_receivable_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_receivable_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Receivable Account...</option>
@@ -432,12 +404,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-amber-600" /> Accounts Payable (Creditors)
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Accounts Payable (Creditors)
                 </Label>
                 <NativeSelect
-                  value={defaultPayableAccount}
-                  onChange={(e) => setDefaultPayableAccount(e.target.value)}
+                  value={formData.default_payable_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_payable_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Payable Account...</option>
@@ -450,12 +422,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5 text-emerald-600" /> Default Cash Account
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Default Cash Account
                 </Label>
                 <NativeSelect
-                  value={defaultCashAccount}
-                  onChange={(e) => setDefaultCashAccount(e.target.value)}
+                  value={formData.default_cash_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_cash_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Cash Account...</option>
@@ -468,12 +440,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-600" /> Default Bank Account
+                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5 block">
+                  Default Bank Account
                 </Label>
                 <NativeSelect
-                  value={defaultBankAccount}
-                  onChange={(e) => setDefaultBankAccount(e.target.value)}
+                  value={formData.default_bank_account_id ?? ''}
+                  onChange={(e) => updateFormField('default_bank_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Bank Account...</option>
@@ -491,10 +463,7 @@ export default function Settings() {
         {/* Auxiliary Accounting Settings */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <Scale className="w-5 h-5 text-slate-700" />
-              <CardTitle className="text-lg font-semibold text-slate-900">Adjustments & Inventory Accounts</CardTitle>
-            </div>
+            <CardTitle className="text-lg font-semibold text-slate-900">Adjustments & Inventory Accounts</CardTitle>
             <CardDescription>Accounts used for round offs, discounts allowed, stock valuation, and depreciation</CardDescription>
           </CardHeader>
 
@@ -505,8 +474,8 @@ export default function Settings() {
                   Round Off Account
                 </Label>
                 <NativeSelect
-                  value={defaultRoundOffAccount}
-                  onChange={(e) => setDefaultRoundOffAccount(e.target.value)}
+                  value={formData.round_off_account_id ?? ''}
+                  onChange={(e) => updateFormField('round_off_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Round Off Account...</option>
@@ -523,8 +492,8 @@ export default function Settings() {
                   Discount Allowed Account
                 </Label>
                 <NativeSelect
-                  value={defaultDiscountAccount}
-                  onChange={(e) => setDefaultDiscountAccount(e.target.value)}
+                  value={formData.discount_allowed_account_id ?? ''}
+                  onChange={(e) => updateFormField('discount_allowed_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Discount Account...</option>
@@ -541,8 +510,8 @@ export default function Settings() {
                   Stock / Inventory Account
                 </Label>
                 <NativeSelect
-                  value={defaultStockAccount}
-                  onChange={(e) => setDefaultStockAccount(e.target.value)}
+                  value={formData.stock_inventory_account_id ?? ''}
+                  onChange={(e) => updateFormField('stock_inventory_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Stock Account...</option>
@@ -559,8 +528,8 @@ export default function Settings() {
                   Depreciation Account
                 </Label>
                 <NativeSelect
-                  value={defaultDepreciationAccount}
-                  onChange={(e) => setDefaultDepreciationAccount(e.target.value)}
+                  value={formData.depreciation_account_id ?? ''}
+                  onChange={(e) => updateFormField('depreciation_account_id', e.target.value)}
                   className="bg-white border-slate-300 font-medium"
                 >
                   <option value="">Select Depreciation Account...</option>
@@ -580,17 +549,9 @@ export default function Settings() {
           <Button
             type="submit"
             disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl shadow-md shadow-blue-500/20 font-semibold flex items-center gap-2 transition-all cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl shadow-md shadow-blue-500/20 font-semibold transition-all cursor-pointer"
           >
-            {saving ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" /> Saving Changes...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" /> Save Settings
-              </>
-            )}
+            {saving ? 'Saving Changes...' : 'Save Settings'}
           </Button>
         </div>
       </form>

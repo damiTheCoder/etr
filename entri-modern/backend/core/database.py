@@ -13,8 +13,46 @@ from uuid import uuid4
 from .schema_engine import get_schema, get_all_schemas, SchemaDef, Doc
 
 
+from contextlib import contextmanager
+
 DB_PATH = None
 _thread_local = threading.local()
+
+
+@contextmanager
+def transaction():
+    """Atomic database transaction context manager with nested savepoint support."""
+    conn = get_connection()
+    nested = getattr(_thread_local, "in_transaction", False)
+    sp_name = None
+    if not nested:
+        _thread_local.in_transaction = True
+        conn.execute("BEGIN TRANSACTION")
+    else:
+        sp_name = f"sp_{uuid4().hex[:8]}"
+        conn.execute(f"SAVEPOINT {sp_name}")
+    try:
+        yield conn
+        if not nested:
+            conn.commit()
+            _thread_local.in_transaction = False
+        else:
+            conn.execute(f"RELEASE SAVEPOINT {sp_name}")
+    except Exception:
+        if not nested:
+            conn.rollback()
+            _thread_local.in_transaction = False
+        else:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
+        raise
+
+def commit_if_not_in_transaction():
+    """Commit connection only if not currently inside a transaction block."""
+    if not getattr(_thread_local, "in_transaction", False):
+        conn = get_connection()
+        conn.commit()
+
+
 
 
 def get_connection() -> sqlite3.Connection:
@@ -98,9 +136,25 @@ def init_database(db_path: Optional[str] = None):
             credit REAL DEFAULT 0,
             reference_type TEXT NOT NULL,
             reference_name TEXT NOT NULL,
-            reverted INTEGER DEFAULT 0
+            reverted INTEGER DEFAULT 0,
+            reconciled INTEGER DEFAULT 0,
+            reconciliation_id TEXT DEFAULT ''
         )
     """)
+
+    # Ensure missing columns on AccountingLedgerEntry are added if table pre-exists
+    ledger_cols = {row[1] for row in conn.execute("PRAGMA table_info(AccountingLedgerEntry)").fetchall()}
+    if "reconciled" not in ledger_cols:
+        try:
+            conn.execute("ALTER TABLE AccountingLedgerEntry ADD COLUMN reconciled INTEGER DEFAULT 0")
+        except Exception:
+            pass
+    if "reconciliation_id" not in ledger_cols:
+        try:
+            conn.execute("ALTER TABLE AccountingLedgerEntry ADD COLUMN reconciliation_id TEXT DEFAULT ''")
+        except Exception:
+            pass
+
 
     # Child table storage (JSON-based, for Table fieldtype)
     conn.execute("""
@@ -117,14 +171,26 @@ def init_database(db_path: Optional[str] = None):
     conn.commit()
 
 
+def reset_database():
+    """Wipes all table contents for test isolation."""
+    conn = get_connection()
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    for t in tables:
+        if not t.startswith("sqlite_"):
+            conn.execute(f"DELETE FROM {t}")
+    conn.commit()
+
+
+
 def _create_table(conn: sqlite3.Connection, schema: SchemaDef):
     columns = ["name TEXT PRIMARY KEY"]
+    col_defs = {}
     for field in schema.fields:
         if field.meta or field.computed:
             continue
         if field.fieldtype == "Table":
             continue
-        if field.fieldname == "name":
+        if field.fieldname in ["name", "created_at", "updated_at"]:
             continue
         col_type = _get_sqlite_type(field.fieldtype)
         default = ""
@@ -135,7 +201,9 @@ def _create_table(conn: sqlite3.Connection, schema: SchemaDef):
                 default = f" DEFAULT {1 if field.default else 0}"
             else:
                 default = f" DEFAULT {field.default}"
-        columns.append(f"  {field.fieldname} {col_type}{default}")
+        col_def = f"{col_type}{default}"
+        columns.append(f"  {field.fieldname} {col_def}")
+        col_defs[field.fieldname] = col_def
 
     columns.append("  created_at TEXT DEFAULT (datetime('now'))")
     columns.append("  updated_at TEXT DEFAULT (datetime('now'))")
@@ -145,6 +213,15 @@ def _create_table(conn: sqlite3.Connection, schema: SchemaDef):
             {', '.join(columns)}
         )
     """)
+
+    existing_cols = {row[1] for row in conn.execute(f"PRAGMA table_info([{schema.name}])").fetchall()}
+    for fname, fdef in col_defs.items():
+        if fname not in existing_cols:
+            try:
+                conn.execute(f"ALTER TABLE [{schema.name}] ADD COLUMN [{fname}] {fdef}")
+            except Exception:
+                pass
+
 
 
 def _get_sqlite_type(fieldtype: str) -> str:
@@ -200,10 +277,11 @@ def insert_doc(doc: Doc) -> str:
             if child_data:
                 _save_child_rows(conn, name, table_name, field.fieldname, child_data)
 
-    conn.commit()
+    commit_if_not_in_transaction()
     doc._not_inserted = False
     doc._dirty = False
     return name
+
 
 
 def _save_child_rows(conn, parent_name: str, parent_type: str, fieldname: str, child_data: list):
@@ -241,9 +319,12 @@ def _load_child_rows(conn, parent_name: str, parent_type: str) -> dict:
 
 def update_doc(doc: Doc):
     """Update an existing document."""
-    conn = get_connection()
     schema = doc.schema
     table_name = schema.name
+    if table_name == "CloseAuditLog":
+        raise ValueError("CloseAuditLog entries are append-only and cannot be modified or deleted.")
+
+    conn = get_connection()
     name = doc.get('name')
 
     fields = [f for f in schema.fields
@@ -264,7 +345,7 @@ def update_doc(doc: Doc):
             if child_data:
                 _save_child_rows(conn, name, table_name, field.fieldname, child_data)
 
-    conn.commit()
+    commit_if_not_in_transaction()
     doc._dirty = False
 
 
@@ -341,13 +422,18 @@ def get_all_docs(
 
 def delete_doc(schema_name: str, name: str):
     """Delete a document."""
+    if schema_name == "CloseAuditLog":
+        raise ValueError("CloseAuditLog entries are append-only and cannot be modified or deleted.")
+
     conn = get_connection()
     conn.execute(f"DELETE FROM [{schema_name}] WHERE name = ?", (name,))
     conn.execute(
         "DELETE FROM ChildTable WHERE parent_type = ? AND parent_name = ?",
         (schema_name, name)
     )
-    conn.commit()
+    commit_if_not_in_transaction()
+
+
 
 
 def get_single_value(key: str) -> Optional[str]:
@@ -455,14 +541,20 @@ def add_audit_log(ref_type: str, ref_name: str, action: str, details: str = ""):
         print(f"Error adding audit log: {e}")
 
 
-def get_audit_logs(ref_type: str, ref_name: str) -> list:
+def get_audit_logs(ref_type: str, ref_name: str = "") -> list:
     """Retrieve audit trail events for a document."""
     try:
         conn = get_connection()
-        rows = conn.execute(
-            "SELECT id, reference_type, reference_name, action, details, timestamp FROM AuditLog WHERE reference_type = ? AND reference_name = ? ORDER BY timestamp DESC",
-            (ref_type, ref_name)
-        ).fetchall()
+        if ref_name:
+            rows = conn.execute(
+                "SELECT id, reference_type, reference_name, action, details, timestamp FROM AuditLog WHERE reference_type = ? AND reference_name = ? ORDER BY timestamp DESC",
+                (ref_type, ref_name)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, reference_type, reference_name, action, details, timestamp FROM AuditLog WHERE reference_type = ? ORDER BY timestamp DESC",
+                (ref_type,)
+            ).fetchall()
         return [
             {
                 "id": r[0] if isinstance(r, (tuple, list)) else r["id"],
@@ -477,3 +569,118 @@ def get_audit_logs(ref_type: str, ref_name: str) -> list:
     except Exception as e:
         print(f"Error reading audit logs: {e}")
         return []
+
+
+class UpdateResult:
+    def __init__(self, matched_count: int, modified_count: int):
+        self.matched_count = matched_count
+        self.modified_count = modified_count
+
+
+class SettingsCollection:
+    def _ensure_table(self):
+        conn = get_connection()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS CompanySettingsDoc (
+                _id TEXT PRIMARY KEY,
+                company_id TEXT UNIQUE NOT NULL,
+                data TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_company_settings_cid ON CompanySettingsDoc(company_id)")
+        conn.commit()
+
+    def create_index(self, key: str, unique: bool = False):
+        self._ensure_table()
+        if key == "company_id" and unique:
+            conn = get_connection()
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_company_settings_cid ON CompanySettingsDoc(company_id)")
+            conn.commit()
+
+    def find_one(self, filter_dict: dict) -> Optional[dict]:
+        self._ensure_table()
+        conn = get_connection()
+        cid = filter_dict.get("company_id")
+        if not cid:
+            return None
+        row = conn.execute("SELECT data FROM CompanySettingsDoc WHERE company_id = ?", (cid,)).fetchone()
+        if not row:
+            return None
+        doc = json.loads(row["data"])
+        
+        for k, v in filter_dict.items():
+            if doc.get(k) != v:
+                return None
+        return doc
+
+    def insert_one(self, doc: dict):
+        self._ensure_table()
+        conn = get_connection()
+        cid = doc.get("company_id")
+        doc_id = doc.get("_id") or str(uuid4())
+        doc["_id"] = doc_id
+        
+        existing = conn.execute("SELECT 1 FROM CompanySettingsDoc WHERE company_id = ?", (cid,)).fetchone()
+        if existing:
+            raise sqlite3.IntegrityError(f"UNIQUE constraint failed: CompanySettingsDoc.company_id ({cid})")
+        
+        data_json = json.dumps(doc)
+        conn.execute("INSERT INTO CompanySettingsDoc (_id, company_id, data) VALUES (?, ?, ?)", (doc_id, cid, data_json))
+        conn.commit()
+        return doc_id
+
+    def update_one(self, filter_dict: dict, update_dict: dict, upsert: bool = False) -> UpdateResult:
+        self._ensure_table()
+        conn = get_connection()
+        cid = filter_dict.get("company_id")
+        if not cid:
+            return UpdateResult(0, 0)
+        
+        row = conn.execute("SELECT data FROM CompanySettingsDoc WHERE company_id = ?", (cid,)).fetchone()
+        if not row:
+            return UpdateResult(0, 0)
+        
+        doc = json.loads(row["data"])
+        
+        if "version" in filter_dict and doc.get("version") != filter_dict["version"]:
+            return UpdateResult(0, 0)
+        
+        set_dict = update_dict.get("$set", {})
+        inc_dict = update_dict.get("$inc", {})
+        
+        for k, v in set_dict.items():
+            if k not in {"_id", "company_id", "created_at"} and v is not None:
+                doc[k] = v
+                
+        for k, v in inc_dict.items():
+            doc[k] = doc.get(k, 1) + v
+            
+        data_json = json.dumps(doc)
+        conn.execute("UPDATE CompanySettingsDoc SET data = ? WHERE company_id = ?", (data_json, cid))
+        conn.commit()
+        
+        if "company_name" in set_dict and set_dict["company_name"] is not None:
+            set_single_value(f"company_name_{cid}", set_dict["company_name"])
+        if "base_currency" in set_dict and set_dict["base_currency"] is not None:
+            set_single_value(f"currency_{cid}", set_dict["base_currency"])
+        if "fiscal_year_start" in set_dict and set_dict["fiscal_year_start"] is not None:
+            set_single_value(f"fiscal_year_start_{cid}", str(set_dict["fiscal_year_start"]))
+        if "fiscal_year_end" in set_dict and set_dict["fiscal_year_end"] is not None:
+            set_single_value(f"fiscal_year_end_{cid}", str(set_dict["fiscal_year_end"]))
+        
+        for key in [
+            "default_sales_income_account_id", "default_purchase_expense_account_id",
+            "default_receivable_account_id", "default_payable_account_id",
+            "default_cash_account_id", "default_bank_account_id",
+            "default_tax_payable_account_id", "default_tax_receivable_account_id",
+            "round_off_account_id", "discount_allowed_account_id",
+            "stock_inventory_account_id", "depreciation_account_id"
+        ]:
+            if key in set_dict and set_dict[key] is not None:
+                set_single_value(f"{key}_{cid}", set_dict[key])
+                
+        return UpdateResult(1, 1)
+
+
+settings = SettingsCollection()
+

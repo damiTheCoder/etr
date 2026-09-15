@@ -6,8 +6,10 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
 import { CheckCircle2, XCircle } from 'lucide-react'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function SalesInvoices() {
+  const { formatCurrency } = useCompany()
   const [invoices, setInvoices] = useState<any[]>([])
 
   function formatNumber(v: number) {
@@ -113,8 +115,8 @@ export default function SalesInvoices() {
                   </TableCell>
                   <TableCell>{inv.party}</TableCell>
                   <TableCell className="text-gray-500">{inv.date}</TableCell>
-                  <TableCell className="text-right font-mono">${formatNumber(inv.baseGrandTotal)}</TableCell>
-                  <TableCell className="text-right font-mono">${formatNumber(inv.outstandingAmount)}</TableCell>
+                  <TableCell className="text-right font-mono">{formatCurrency(inv.baseGrandTotal)}</TableCell>
+                  <TableCell className="text-right font-mono">{formatCurrency(inv.outstandingAmount)}</TableCell>
                   <TableCell className="text-center">
                     {inv.cancelled ? (
                       <Badge variant="destructive">Cancelled</Badge>

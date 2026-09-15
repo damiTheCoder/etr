@@ -5,13 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function Payments() {
+  const { formatCurrency } = useCompany()
   const [payments, setPayments] = useState<any[]>([])
-
-  function formatNumber(v: number) {
-    return Number(v || 0).toFixed(2)
-  }
 
   function statusVariant(p: any): 'default' | 'secondary' | 'destructive' | 'outline' {
     if (p.cancelled) return 'destructive'
@@ -39,12 +37,12 @@ export default function Payments() {
   }, [])
 
   const totalReceived = payments
-    .filter(p => p.paymentType === 'Receive' && p.submitted && !p.cancelled)
-    .reduce((s, p) => s + Number(p.amount || 0), 0)
+    .filter(p => p.paymentType === 'Receive' && p.submitted)
+    .reduce((sum, p) => sum + (p.amount || 0), 0)
 
   const totalPaid = payments
-    .filter(p => p.paymentType === 'Pay' && p.submitted && !p.cancelled)
-    .reduce((s, p) => s + Number(p.amount || 0), 0)
+    .filter(p => p.paymentType === 'Pay' && p.submitted)
+    .reduce((sum, p) => sum + (p.amount || 0), 0)
 
   const netFlow = totalReceived - totalPaid
 
@@ -72,7 +70,7 @@ export default function Payments() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Payments</h1>
-          <p className="text-sm text-gray-500 mt-1">Track money received and paid</p>
+          <p className="text-sm text-gray-500 mt-1">Record incoming receipts and outgoing payments</p>
         </div>
         <Button asChild>
           <Link to="/payments/new">New Payment</Link>
@@ -85,7 +83,7 @@ export default function Payments() {
             <CardTitle className="text-sm font-medium text-gray-500">Total Received</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">${formatNumber(totalReceived)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalReceived)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -93,7 +91,7 @@ export default function Payments() {
             <CardTitle className="text-sm font-medium text-gray-500">Total Paid</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">${formatNumber(totalPaid)}</div>
+            <div className="text-2xl font-bold text-red-600">{formatCurrency(totalPaid)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -102,7 +100,7 @@ export default function Payments() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              ${formatNumber(netFlow)}
+              {formatCurrency(netFlow)}
             </div>
           </CardContent>
         </Card>
@@ -148,7 +146,7 @@ export default function Payments() {
                   </Badge>
                 </TableCell>
                 <TableCell>{p.paymentMethod || '-'}</TableCell>
-                <TableCell className="text-right font-mono">${formatNumber(p.amount)}</TableCell>
+                <TableCell className="text-right font-mono">{formatCurrency(p.amount)}</TableCell>
                 <TableCell className="text-center">
                   <Badge variant={statusVariant(p)}>{statusLabel(p)}</Badge>
                 </TableCell>

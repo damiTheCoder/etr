@@ -5,9 +5,18 @@
   "is_submittable": true,
   "fields": [
     { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "JE-" },
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "default": "default_company" },
+    { "fieldname": "idempotency_key", "label": "Idempotency Key", "fieldtype": "Data" },
+    { "fieldname": "referenceType", "label": "Reference Type", "fieldtype": "Data" },
+    { "fieldname": "referenceName", "label": "Reference Name", "fieldtype": "Data" },
+    { "fieldname": "user_remark", "label": "User Remark", "fieldtype": "Text" },
     { "fieldname": "date", "label": "Date", "fieldtype": "Date", "required": true },
     { "fieldname": "entryType", "label": "Entry Type", "fieldtype": "Select", "options": [
       {"value": "Journal Entry", "label": "Journal Entry"},
+      {"value": "Sales Invoice", "label": "Sales Invoice"},
+      {"value": "Vendor Bill", "label": "Vendor Bill"},
+      {"value": "Payment", "label": "Payment"},
+      {"value": "Discount", "label": "Discount"},
       {"value": "Opening Entry", "label": "Opening Entry"},
       {"value": "Depreciation Entry", "label": "Depreciation Entry"},
       {"value": "Adjustment Entry", "label": "Adjustment Entry"},
@@ -20,6 +29,11 @@
     { "fieldname": "referenceNumber", "label": "Reference Number", "fieldtype": "Data" },
     { "fieldname": "referenceDate", "label": "Reference Date", "fieldtype": "Date" },
     { "fieldname": "userRemark", "label": "User Remark", "fieldtype": "Text" },
+    { "fieldname": "status", "label": "Status", "fieldtype": "Select", "options": [
+      {"value": "Draft", "label": "Draft"},
+      {"value": "Submitted", "label": "Submitted"},
+      {"value": "Cancelled", "label": "Cancelled"}
+    ], "default": "Draft" },
     { "fieldname": "approvalStatus", "label": "Approval Status", "fieldtype": "Select", "options": [
       {"value": "Pending", "label": "Pending"},
       {"value": "Approved", "label": "Approved"},

@@ -1,0 +1,16 @@
+{
+  "name": "CloseAuditLog",
+  "label": "Close Audit Log",
+  "is_submittable": false,
+  "naming": "hash",
+  "fields": [
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "required": true },
+    { "fieldname": "period_id", "label": "Period ID", "fieldtype": "Data", "required": true },
+    { "fieldname": "action", "label": "Action", "fieldtype": "Data", "required": true },
+    { "fieldname": "user_id", "label": "User ID", "fieldtype": "Data", "required": true },
+    { "fieldname": "timestamp", "label": "Timestamp", "fieldtype": "Datetime", "required": true },
+    { "fieldname": "details", "label": "Details", "fieldtype": "Code" },
+    { "fieldname": "ip_address", "label": "IP Address", "fieldtype": "Data" }
+  ],
+  "keywordFields": ["name", "company_id", "period_id", "action"]
+}

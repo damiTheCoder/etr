@@ -11,6 +11,15 @@ from .tax import TaxModel
 from .purchase_order import PurchaseOrderModel
 from .reconciliation import ReconciliationModel
 from .approval import ApprovalModel
+from .approval_model import ApprovalRuleModel
+
+from backend.core.base_model import BaseModel
+
+
+class GenericModel(BaseModel):
+    def __init__(self, schema_name: str):
+        self.schema_name = schema_name
+
 
 MODEL_REGISTRY = {
     "Account": AccountModel(),
@@ -26,6 +35,10 @@ MODEL_REGISTRY = {
     "PurchaseOrder": PurchaseOrderModel(),
     "Reconciliation": ReconciliationModel(),
     "Approval": ApprovalModel(),
+    "ApprovalRule": ApprovalRuleModel(),
+    "FiscalPeriod": GenericModel("FiscalPeriod"),
+    "CloseChecklistTemplate": GenericModel("CloseChecklistTemplate"),
+    "CloseAuditLog": GenericModel("CloseAuditLog"),
 }
 
 def get_model(schema_name: str):
@@ -46,10 +59,20 @@ def get_model(schema_name: str):
         "numberseries": "NumberSeries",
         "reconciliation": "Reconciliation",
         "approval": "Approval",
+        "approvalrule": "ApprovalRule",
+        "fiscalperiod": "FiscalPeriod",
+        "closechecklisttemplate": "CloseChecklistTemplate",
+        "closeauditlog": "CloseAuditLog",
     }
     target_key = aliases.get(normalized, schema_name)
-    return MODEL_REGISTRY.get(target_key) or MODEL_REGISTRY.get(schema_name)
+    model = MODEL_REGISTRY.get(target_key) or MODEL_REGISTRY.get(schema_name)
+    if not model:
+        model = GenericModel(schema_name)
+        MODEL_REGISTRY[schema_name] = model
+    return model
+
 
 def get_all_models():
     return MODEL_REGISTRY
+
 

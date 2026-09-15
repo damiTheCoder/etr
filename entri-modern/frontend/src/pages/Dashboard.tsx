@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { api } from '@/utils/api'
+import { useCompany } from '@/context/CompanyContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -232,6 +233,7 @@ function buildChartData(
 }
 
 export default function Dashboard() {
+  const { formatCurrency: contextFormatCurrency, baseCurrency } = useCompany()
   const [cashBalance, setCashBalance] = useState(0)
   const [totalRevenue, setTotalRevenue] = useState(0)
   const [totalExpenses, setTotalExpenses] = useState(0)
@@ -251,28 +253,37 @@ export default function Dashboard() {
   const [arPeriod, setArPeriod] = useState<Period>('month')
   const [apPeriod, setApPeriod] = useState<Period>('month')
 
+  function getSymbol() {
+    if (baseCurrency === 'NGN') return '₦'
+    if (baseCurrency === 'EUR') return '€'
+    if (baseCurrency === 'GBP') return '£'
+    return '$'
+  }
+
   function formatYAxis(v: number) {
-    if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M'
-    if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(1) + 'k'
-    return '$' + Math.round(v)
+    const sym = getSymbol()
+    if (Math.abs(v) >= 1000000) return sym + (v / 1000000).toFixed(1) + 'M'
+    if (Math.abs(v) >= 1000) return sym + (v / 1000).toFixed(1) + 'k'
+    return sym + Math.round(v)
   }
 
   function formatCurrency(v: number) {
     const abs = Math.abs(v || 0)
     const sign = v < 0 ? '-' : ''
+    const sym = getSymbol()
     if (abs >= 1_000_000) {
       const formatted = (abs / 1_000_000).toFixed(1).replace(/\.0$/, '')
-      return `${sign}$${formatted}M`
+      return `${sign}${sym}${formatted}M`
     }
     if (abs >= 1_000) {
       const formatted = (abs / 1_000).toFixed(1).replace(/\.0$/, '')
-      return `${sign}$${formatted}k`
+      return `${sign}${sym}${formatted}k`
     }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0)
+    return contextFormatCurrency(v)
   }
 
   function formatFullCurrency(v: number) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0)
+    return contextFormatCurrency(v)
   }
 
   useEffect(() => {

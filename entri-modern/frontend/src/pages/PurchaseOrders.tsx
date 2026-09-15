@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function PurchaseOrders() {
+  const { formatCurrency } = useCompany()
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([])
 
   const formatNumber = (v: number) => Number(v || 0).toFixed(2)
@@ -56,7 +58,7 @@ export default function PurchaseOrders() {
                   </TableCell>
                   <TableCell className="text-gray-500">{po.party}</TableCell>
                   <TableCell className="text-gray-500">{po.date}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">${formatNumber(po.baseGrandTotal)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{formatCurrency(po.baseGrandTotal)}</TableCell>
                   <TableCell>
                     <Badge variant={po.status === 'Received' ? 'default' : po.submitted ? 'secondary' : 'outline'}>
                       {po.status || 'Draft'}

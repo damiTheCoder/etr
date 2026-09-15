@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Calendar, X, ExternalLink } from 'lucide-react'
+import { useCompany } from '@/context/CompanyContext'
 
 export interface BrandItem {
   id: string
@@ -151,18 +152,21 @@ export const BrandBanner: React.FC<BrandBannerProps> = ({ metrics }) => {
   const currentSubMetric = activeSubMetrics[subMetricIndex % activeSubMetrics.length]
 
   const rawValue = metrics ? metrics[currentSubMetric.key] || 0 : 0
+  const { formatCurrency: contextFormatCurrency, currencySymbol } = useCompany()
+
   const formatAbbreviatedCurrency = (v: number): string => {
     const abs = Math.abs(v || 0)
     const sign = v < 0 ? '-' : ''
+    const sym = currencySymbol
     if (abs >= 1_000_000) {
       const formatted = (abs / 1_000_000).toFixed(1).replace(/\.0$/, '')
-      return `${sign}$${formatted}M`
+      return `${sign}${sym}${formatted}M`
     }
     if (abs >= 1_000) {
       const formatted = (abs / 1_000).toFixed(1).replace(/\.0$/, '')
-      return `${sign}$${formatted}k`
+      return `${sign}${sym}${formatted}k`
     }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0)
+    return contextFormatCurrency(v)
   }
   const formattedValue = formatAbbreviatedCurrency(rawValue)
 

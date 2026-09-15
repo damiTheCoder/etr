@@ -5,6 +5,7 @@
   "naming": "numberSeries",
   "fields": [
     { "fieldname": "numberSeries", "label": "Number Series", "fieldtype": "Data", "default": "APPR-", "required": true },
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "default": "default_company" },
     { "fieldname": "referenceType", "label": "Reference Type", "fieldtype": "Select", "options": [
       {"value": "SalesInvoice", "label": "Sales Invoice"},
       {"value": "PurchaseInvoice", "label": "Purchase Invoice"},
@@ -13,6 +14,9 @@
       {"value": "PurchaseOrder", "label": "Purchase Order"}
     ], "required": true },
     { "fieldname": "referenceName", "label": "Reference Name", "fieldtype": "Data", "required": true },
+    { "fieldname": "amount", "label": "Amount", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "requested_by", "label": "Requested By", "fieldtype": "Data", "default": "system" },
+    { "fieldname": "approver", "label": "Approver", "fieldtype": "Data" },
     { "fieldname": "status", "label": "Status", "fieldtype": "Select", "options": [
       {"value": "Pending", "label": "Pending"},
       {"value": "Approved", "label": "Approved"},
@@ -20,7 +24,8 @@
     ], "default": "Pending" },
     { "fieldname": "submitted", "label": "Submitted", "fieldtype": "Check", "default": false },
     { "fieldname": "cancelled", "label": "Cancelled", "fieldtype": "Check", "default": false },
-    { "fieldname": "remark", "label": "Remark", "fieldtype": "Text" }
+    { "fieldname": "remark", "label": "Remark", "fieldtype": "Text" },
+    { "fieldname": "decided_at", "label": "Decided At", "fieldtype": "Datetime" }
   ],
-  "keywordFields": ["name", "referenceName"]
+  "keywordFields": ["name", "referenceName", "company_id"]
 }

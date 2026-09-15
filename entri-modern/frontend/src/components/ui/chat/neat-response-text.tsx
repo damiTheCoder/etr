@@ -134,10 +134,63 @@ function parseLineToBlock(trimmed: string): ContentBlock {
   return { type: "text", content: trimmed }
 }
 
+function formatJsonToEnglish(jsonStr: string): string | null {
+  if (!jsonStr) return null
+  const trimmed = jsonStr.trim()
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null
+
+  try {
+    const data = JSON.parse(trimmed)
+    if (typeof data !== "object" || data === null) return null
+
+    if (data.schema_name === "JournalEntry" || data.jv_name || data.doc_name) {
+      const docName = data.jv_name || data.doc_name || "Journal Entry"
+      const status = data.status || "Draft"
+      const amount = data.total_debit || data.total_credit || 0
+      const msg = data.message || ""
+      
+      let formatted = `✅ **Recorded Journal Entry \`${docName}\`**\n` +
+        `- **Status**: ${status}\n` +
+        `- **Total Amount**: $${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+      if (data.accounts && Array.isArray(data.accounts)) {
+        const accs = data.accounts.map((a: any) => {
+          const name = a.account || "Account"
+          if (a.debit > 0) return `${name} (Debit $${Number(a.debit).toLocaleString()})`
+          if (a.credit > 0) return `${name} (Credit $${Number(a.credit).toLocaleString()})`
+          return name
+        }).join(", ")
+        if (accs) formatted += `\n- **Accounts**: ${accs}`
+      }
+
+      if (msg) formatted += `\n\n${msg}`
+      return formatted
+    }
+
+    if (data.message) {
+      return `✅ ${data.message}`
+    }
+
+    if (data.error) {
+      return `❌ ${data.error}`
+    }
+
+    const lines = Object.entries(data)
+      .filter(([k, v]) => typeof v !== "object" && k !== "success")
+      .map(([k, v]) => `- **${k.replace(/_/g, " ")}**: ${v}`)
+    return lines.length > 0 ? lines.join("\n") : null
+  } catch {
+    return null
+  }
+}
+
 export const NeatResponseText: React.FC<NeatResponseTextProps> = ({ content }) => {
   if (!content) return null
 
-  const blocks = parseBlocks(content)
+  const formattedJson = formatJsonToEnglish(content)
+  const textToRender = formattedJson || content
+
+  const blocks = parseBlocks(textToRender)
 
   return (
     <div className="space-y-2 text-[13.5px] leading-[1.65] text-slate-800 font-sans">

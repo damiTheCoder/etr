@@ -11,7 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
+import { useCompany } from '@/context/CompanyContext'
+
 export default function JournalEntryForm() {
+  const { formatCurrency } = useCompany()
   const navigate = useNavigate()
   const { name } = useParams()
   const isEdit = !!name
@@ -120,10 +123,6 @@ export default function JournalEntryForm() {
   const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0)
   const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0)
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0
-
-  function formatCurrency(v: number) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0)
-  }
 
   async function handleResetToDraft() {
     if (!name) return

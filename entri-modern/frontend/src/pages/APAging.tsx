@@ -5,11 +5,11 @@ import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function APAging() {
+  const { formatCurrency, currencySymbol } = useCompany()
   const [aging, setAging] = useState<any>({ current: 0, periods: { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 }, total: 0 })
-
-  const formatNumber = (v: number) => Number(v || 0).toFixed(2)
 
   useEffect(() => {
     async function loadData() {
@@ -24,7 +24,7 @@ export default function APAging() {
   }, [])
 
   function handleExportCSV() {
-    const headers = ['Account', 'Current ($)', '0-30 Days ($)', '31-60 Days ($)', '61-90 Days ($)', '90+ Days ($)', 'Total ($)']
+    const headers = [`Account`, `Current (${currencySymbol})`, `0-30 Days (${currencySymbol})`, `31-60 Days (${currencySymbol})`, `61-90 Days (${currencySymbol})`, `90+ Days (${currencySymbol})`, `Total (${currencySymbol})`]
     const rows = [
       [
         'Creditors (Accounts Payable)',
@@ -69,33 +69,33 @@ export default function APAging() {
               <TableHeader>
                 <TableRow className="border-b border-slate-300 bg-slate-100">
                   <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">Current ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">0-30 Days ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">31-60 Days ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">61-90 Days ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">90+ Days ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">Total ($)</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">Current ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">0-30 Days ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">31-60 Days ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">61-90 Days ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">90+ Days ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">Total ({currencySymbol})</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="bg-transparent">
                 <TableRow className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
                   <TableCell className="font-semibold text-slate-900">Creditors (Accounts Payable)</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.current)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.periods?.['0-30'])}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.periods?.['31-60'])}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.periods?.['61-90'])}</TableCell>
-                  <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.periods?.['90+'])}</TableCell>
-                  <TableCell className="text-right font-mono text-sm font-bold text-slate-900">${formatNumber(aging.total)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(aging.current)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(aging.periods?.['0-30'])}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(aging.periods?.['31-60'])}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(aging.periods?.['61-90'])}</TableCell>
+                  <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(aging.periods?.['90+'])}</TableCell>
+                  <TableCell className="text-right font-mono text-sm font-bold text-slate-900">{formatCurrency(aging.total)}</TableCell>
                 </TableRow>
                 {/* Totals Summary Row */}
                 <TableRow className="bg-transparent text-slate-900 font-bold border-t-2 border-b-2 border-slate-300">
                   <TableCell className="font-bold text-slate-900">TOTAL AP PAYABLES</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.current)}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.periods?.['0-30'])}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.periods?.['31-60'])}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.periods?.['61-90'])}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.periods?.['90+'])}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.total)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.current)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.periods?.['0-30'])}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.periods?.['31-60'])}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.periods?.['61-90'])}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.periods?.['90+'])}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(aging.total)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

@@ -10,8 +10,10 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function ReconciliationForm() {
+  const { formatCurrency, currencySymbol } = useCompany()
   const navigate = useNavigate()
   const { name } = useParams()
   const isEdit = !!name
@@ -166,7 +168,7 @@ export default function ReconciliationForm() {
                 <Input value={date} onChange={(e) => setDate(e.target.value)} type="date" required />
               </div>
               <div>
-                <Label className="mb-1.5 block">Opening Balance ($)</Label>
+                <Label className="mb-1.5 block">Opening Balance ({currencySymbol})</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -175,7 +177,7 @@ export default function ReconciliationForm() {
                 />
               </div>
               <div>
-                <Label className="mb-1.5 block">Statement Closing Balance ($)</Label>
+                <Label className="mb-1.5 block">Statement Closing Balance ({currencySymbol})</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -189,20 +191,20 @@ export default function ReconciliationForm() {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
               <div className="p-3 bg-slate-50 rounded-xl border">
                 <span className="text-xs text-slate-500 block">Cleared Deposits</span>
-                <span className="text-lg font-bold text-emerald-600">${formatNumber(clearedDeposits)}</span>
+                <span className="text-lg font-bold text-emerald-600">{formatCurrency(clearedDeposits)}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border">
                 <span className="text-xs text-slate-500 block">Cleared Withdrawals</span>
-                <span className="text-lg font-bold text-rose-600">${formatNumber(clearedWithdrawals)}</span>
+                <span className="text-lg font-bold text-rose-600">{formatCurrency(clearedWithdrawals)}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border">
                 <span className="text-xs text-slate-500 block">Reconciled Balance</span>
-                <span className="text-lg font-bold text-slate-900">${formatNumber(reconciledBalance)}</span>
+                <span className="text-lg font-bold text-slate-900">{formatCurrency(reconciledBalance)}</span>
               </div>
               <div className={`p-3 rounded-xl border ${Math.abs(difference) < 0.01 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
                 <span className="text-xs text-slate-500 block">Difference</span>
                 <span className={`text-lg font-bold ${Math.abs(difference) < 0.01 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  ${formatNumber(difference)}
+                  {formatCurrency(difference)}
                 </span>
               </div>
             </div>
@@ -264,10 +266,10 @@ export default function ReconciliationForm() {
                         {e.party ? `${e.party} (${e.reference_name || ''})` : e.reference_name || e.account}
                       </TableCell>
                       <TableCell className="text-right font-mono text-emerald-600">
-                        {Number(e.debit || 0) > 0 ? `$${formatNumber(e.debit)}` : '-'}
+                        {Number(e.debit || 0) > 0 ? formatCurrency(e.debit) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-rose-600">
-                        {Number(e.credit || 0) > 0 ? `$${formatNumber(e.credit)}` : '-'}
+                        {Number(e.credit || 0) > 0 ? formatCurrency(e.credit) : '-'}
                       </TableCell>
                     </TableRow>
                   )

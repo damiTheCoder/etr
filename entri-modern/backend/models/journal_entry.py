@@ -13,6 +13,7 @@ Supports multiple entry types per accounting standards:
   - Bank Reconciliation
 
 The ledger validates that total debits = total credits (double-entry rule).
+Enforces POSTED Immutability Guard: Submitted/Posted journal entries cannot be modified.
 """
 from datetime import date
 from backend.core.base_model import BaseModel
@@ -30,12 +31,25 @@ class JournalEntryModel(BaseModel):
             "entryType": "Journal Entry",
             "totalDebit": 0,
             "totalCredit": 0,
+            "status": "Draft",
+            "approvalStatus": "Pending",
             "submitted": False,
             "cancelled": False,
         }
 
     async def before_sync(self, doc: Doc):
-        """Compute total debit and total credit before saving, resolve accounts, auto-balance 2-line entries."""
+        """Compute total debit and total credit before saving, enforce immutability guard on posted entries."""
+        # ─── POSTED Immutability Guard ─────────────────────────────────────────
+        if doc.name and not doc.not_inserted:
+            existing = db.get_doc("JournalEntry", doc.name)
+            if existing and (existing.get("submitted") or existing.get("status") in ["Submitted", "Posted"]):
+                # Allow status updates during submit/cancel lifecycle transitions
+                if not doc._data.get("_is_lifecycle_transition"):
+                    raise ValueError(
+                        f"Journal Entry '{doc.name}' has been POSTED/Submitted and is immutable. "
+                        "Posted entries cannot be edited. Create a reversal entry instead."
+                    )
+
         from backend.coa import resolve_account_name
         accounts = doc.get("accounts", [])
         if not isinstance(accounts, list):
@@ -108,9 +122,12 @@ class JournalEntryModel(BaseModel):
         for entry in posting.get_entries():
             _save_ledger_entry(entry)
 
+        doc._data["_is_lifecycle_transition"] = True
         doc._data["submitted"] = True
+        doc._data["status"] = "Submitted"
         doc._data["cancelled"] = False
         db.update_doc(doc)
+        doc._data.pop("_is_lifecycle_transition", None)
 
     async def after_cancel(self, doc: Doc):
         """Reverse all ledger entries for this journal entry."""
@@ -119,7 +136,9 @@ class JournalEntryModel(BaseModel):
             if entry.get("reference_name") == doc.get("name"):
                 _reverse_ledger_entry(entry)
 
+        doc._data["_is_lifecycle_transition"] = True
         doc._data["submitted"] = False
+        doc._data["status"] = "Cancelled"
         doc._data["cancelled"] = True
         db.update_doc(doc)
-
+        doc._data.pop("_is_lifecycle_transition", None)

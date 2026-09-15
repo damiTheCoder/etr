@@ -1,0 +1,19 @@
+{
+  "name": "ApprovalRule",
+  "label": "Approval Rule",
+  "naming": "hash",
+  "fields": [
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "default": "default_company" },
+    { "fieldname": "document_type", "label": "Document Type", "fieldtype": "Select", "options": [
+      {"value": "JournalEntry", "label": "Journal Entry"},
+      {"value": "SalesInvoice", "label": "Sales Invoice"},
+      {"value": "PurchaseInvoice", "label": "Purchase Invoice"},
+      {"value": "Payment", "label": "Payment"},
+      {"value": "PurchaseOrder", "label": "Purchase Order"}
+    ], "required": true },
+    { "fieldname": "min_amount", "label": "Minimum Amount Threshold", "fieldtype": "Currency", "default": 0 },
+    { "fieldname": "approver_role", "label": "Approver Role", "fieldtype": "Data", "default": "Finance Manager" },
+    { "fieldname": "is_active", "label": "Is Active", "fieldtype": "Check", "default": true }
+  ],
+  "keywordFields": ["company_id", "document_type"]
+}

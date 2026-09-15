@@ -1,0 +1,27 @@
+{
+  "name": "FiscalPeriod",
+  "label": "Fiscal Period",
+  "is_submittable": false,
+  "naming": "hash",
+  "fields": [
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "default": "default_company", "required": true },
+    { "fieldname": "period_start", "label": "Period Start", "fieldtype": "Datetime", "required": true },
+    { "fieldname": "period_end", "label": "Period End", "fieldtype": "Datetime", "required": true },
+    { "fieldname": "label", "label": "Label", "fieldtype": "Data", "required": true },
+    { "fieldname": "status", "label": "Status", "fieldtype": "Select", "options": [
+      {"value": "OPEN", "label": "OPEN"},
+      {"value": "CLOSING", "label": "CLOSING"},
+      {"value": "CLOSED", "label": "CLOSED"},
+      {"value": "LOCKED", "label": "LOCKED"}
+    ], "default": "OPEN" },
+    { "fieldname": "closed_by", "label": "Closed By", "fieldtype": "Data" },
+    { "fieldname": "closed_at", "label": "Closed At", "fieldtype": "Datetime" },
+    { "fieldname": "reopened_by", "label": "Reopened By", "fieldtype": "Data" },
+    { "fieldname": "reopened_at", "label": "Reopened At", "fieldtype": "Datetime" },
+    { "fieldname": "reopen_reason", "label": "Reopen Reason", "fieldtype": "Text" },
+    { "fieldname": "checklist_snapshot", "label": "Checklist Snapshot", "fieldtype": "Code" },
+    { "fieldname": "created_at", "label": "Created At", "fieldtype": "Datetime" },
+    { "fieldname": "updated_at", "label": "Updated At", "fieldtype": "Datetime" }
+  ],
+  "keywordFields": ["name", "label", "company_id", "status"]
+}

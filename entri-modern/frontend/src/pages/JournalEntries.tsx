@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function JournalEntries() {
+  const { formatCurrency } = useCompany()
   const navigate = useNavigate()
   const [entries, setEntries] = useState<any[]>([])
 
@@ -111,8 +113,8 @@ export default function JournalEntries() {
                 </TableCell>
                 <TableCell className="text-gray-500">{je.date}</TableCell>
                 <TableCell>{je.entryType}</TableCell>
-                <TableCell className="text-right font-mono">${formatNumber(je.totalDebit)}</TableCell>
-                <TableCell className="text-right font-mono">${formatNumber(je.totalCredit)}</TableCell>
+                <TableCell className="text-right font-mono">{formatCurrency(je.totalDebit)}</TableCell>
+                <TableCell className="text-right font-mono">{formatCurrency(je.totalCredit)}</TableCell>
                 <TableCell className="text-center">
                   <Badge variant={statusVariant(je)}>{statusLabel(je)}</Badge>
                 </TableCell>

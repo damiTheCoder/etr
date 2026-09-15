@@ -408,7 +408,9 @@ def resolve_account_name(name: str) -> str:
         "services": "Service",
         "receivables": "Debtors",
         "payables": "Creditors",
+        "foreign exchange gain/loss": "Foreign Exchange Gain/Loss",
     }
+
     if name_clean.lower() in extra_aliases:
         return extra_aliases[name_clean.lower()]
 

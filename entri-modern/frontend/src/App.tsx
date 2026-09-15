@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { CompanyProvider, useCompany } from './context/CompanyContext'
 import {
   LayoutDashboard,
   FileText,
@@ -62,6 +63,7 @@ function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
+  const { companyName } = useCompany()
   const location = useLocation()
   const navigate = useNavigate()
   const path = location.pathname
@@ -346,8 +348,8 @@ function AppLayout() {
             <div className="h-5 w-[1px] bg-slate-200"></div>
 
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="entri logo" className="w-6 h-6 rounded-full object-cover" />
-              <span className="text-base font-bold tracking-tight text-blue-600">entri</span>
+              <img src="/logo.png" alt="company logo" className="w-6 h-6 rounded-full object-cover" />
+              <span className="text-base font-bold tracking-tight text-slate-900">{companyName}</span>
             </div>
           </div>
 
@@ -427,8 +429,10 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppLayout />
-    </BrowserRouter>
+    <CompanyProvider>
+      <BrowserRouter>
+        <AppLayout />
+      </BrowserRouter>
+    </CompanyProvider>
   )
 }

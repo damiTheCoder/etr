@@ -1,0 +1,14 @@
+{
+  "name": "CloseChecklistTemplate",
+  "label": "Close Checklist Template",
+  "is_submittable": false,
+  "naming": "hash",
+  "fields": [
+    { "fieldname": "company_id", "label": "Company ID", "fieldtype": "Data", "default": "default_company", "required": true },
+    { "fieldname": "tasks", "label": "Tasks", "fieldtype": "Code" },
+    { "fieldname": "is_active", "label": "Is Active", "fieldtype": "Check", "default": true },
+    { "fieldname": "created_at", "label": "Created At", "fieldtype": "Datetime" },
+    { "fieldname": "updated_at", "label": "Updated At", "fieldtype": "Datetime" }
+  ],
+  "keywordFields": ["name", "company_id"]
+}

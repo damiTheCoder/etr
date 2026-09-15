@@ -9,16 +9,15 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
+import { useCompany } from '@/context/CompanyContext'
+
 export default function GeneralLedger() {
+  const { formatCurrency } = useCompany()
   const [data, setData] = useState<any>(null)
   const [accounts, setAccounts] = useState<any[]>([])
   const [filterAccount, setFilterAccount] = useState('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-
-  function formatCurrency(v: number) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0)
-  }
 
   async function loadReport() {
     try {

@@ -8,14 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
+import { useCompany } from '@/context/CompanyContext'
+
 export default function TrialBalance() {
+  const { formatCurrency } = useCompany()
   const [data, setData] = useState<any>(null)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-
-  function formatCurrency(v: number) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0)
-  }
 
   function rootTypeBadge(rt: string): 'default' | 'secondary' | 'destructive' | 'outline' {
     const map: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {

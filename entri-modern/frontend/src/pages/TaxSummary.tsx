@@ -5,8 +5,10 @@ import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCompany } from '@/context/CompanyContext'
 
 export default function TaxSummary() {
+  const { formatCurrency, currencySymbol } = useCompany()
   const [taxAccounts, setTaxAccounts] = useState<Record<string, any>>({})
 
   const formatNumber = (v: number) => Number(v || 0).toFixed(2)
@@ -71,9 +73,9 @@ export default function TaxSummary() {
               <TableHeader>
                 <TableRow className="border-b border-slate-300 bg-slate-100">
                   <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">Debit ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">Credit ($)</TableHead>
-                  <TableHead className="text-right text-slate-900 font-bold">Balance ($)</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">Debit ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">Credit ({currencySymbol})</TableHead>
+                  <TableHead className="text-right text-slate-900 font-bold">Balance ({currencySymbol})</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="bg-transparent">
@@ -82,9 +84,9 @@ export default function TaxSummary() {
                   return (
                     <TableRow key={name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
                       <TableCell className="font-semibold text-slate-900">{name}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(acct.debit)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(acct.credit)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm font-bold text-slate-900">${formatNumber(acct.balance)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(acct.debit)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-slate-900">{formatCurrency(acct.credit)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm font-bold text-slate-900">{formatCurrency(acct.balance)}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -98,9 +100,9 @@ export default function TaxSummary() {
                 {/* Totals Summary Row */}
                 <TableRow className="bg-transparent text-slate-900 font-bold border-t-2 border-b-2 border-slate-300">
                   <TableCell className="font-bold text-slate-900">TOTAL</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalDebit)}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalCredit)}</TableCell>
-                  <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(totalBalance)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalDebit)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalCredit)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalBalance)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
