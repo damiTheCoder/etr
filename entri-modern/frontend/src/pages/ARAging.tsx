@@ -56,18 +56,18 @@ export default function ARAging() {
         </div>
       </div>
 
-      <Card className="border-none bg-slate-100/60 shadow-2xs rounded-2xl overflow-hidden p-0">
-        <CardHeader className="border-none px-6 py-4 bg-transparent">
+      <Card className="border-none bg-transparent shadow-none p-0">
+        <CardHeader className="border-none px-0 py-4 bg-transparent">
           <CardTitle className="text-slate-900 font-bold">AR Aging Breakdown</CardTitle>
           <CardDescription className="text-slate-500 font-medium">
             Active Debtors Account Summary
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 bg-transparent">
           <div className="overflow-x-auto">
-            <Table className="w-full">
+            <Table className="w-full bg-transparent">
               <TableHeader>
-                <TableRow className="border-b border-slate-200/40 bg-slate-200/30">
+                <TableRow className="border-b border-slate-300 bg-slate-100">
                   <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
                   <TableHead className="text-right text-slate-900 font-bold">Current ($)</TableHead>
                   <TableHead className="text-right text-slate-900 font-bold">0-30 Days ($)</TableHead>
@@ -77,8 +77,8 @@ export default function ARAging() {
                   <TableHead className="text-right text-slate-900 font-bold">Total ($)</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                <TableRow className="hover:bg-slate-200/30 border-b border-slate-200/30 bg-transparent">
+              <TableBody className="bg-transparent">
+                <TableRow className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
                   <TableCell className="font-semibold text-slate-900">Debtors (Accounts Receivable)</TableCell>
                   <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.current)}</TableCell>
                   <TableCell className="text-right font-mono text-sm text-slate-900">${formatNumber(aging.periods?.['0-30'])}</TableCell>
@@ -88,7 +88,7 @@ export default function ARAging() {
                   <TableCell className="text-right font-mono text-sm font-bold text-slate-900">${formatNumber(aging.total)}</TableCell>
                 </TableRow>
                 {/* Totals Summary Row */}
-                <TableRow className="bg-slate-200/80 text-slate-900 font-bold border-t border-slate-300/60">
+                <TableRow className="bg-transparent text-slate-900 font-bold border-t-2 border-b-2 border-slate-300">
                   <TableCell className="font-bold text-slate-900">TOTAL</TableCell>
                   <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.current)}</TableCell>
                   <TableCell className="text-right font-mono font-bold text-slate-900">${formatNumber(aging.periods?.['0-30'])}</TableCell>
