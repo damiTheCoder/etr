@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Download, Printer } from 'lucide-react'
 import { api } from '@/utils/api'
 import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
@@ -8,16 +7,24 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-
 import { useCompany } from '@/context/CompanyContext'
 
 export default function GeneralLedger() {
   const { formatCurrency } = useCompany()
-  const [data, setData] = useState<any>(null)
+  const [entries, setEntries] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
-  const [filterAccount, setFilterAccount] = useState('all')
+  const [filterAccount, setFilterAccount] = useState<string>('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+
+  async function loadAccounts() {
+    try {
+      const res = await api.list('Account')
+      setAccounts(res)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   async function loadReport() {
     try {
@@ -26,36 +33,27 @@ export default function GeneralLedger() {
       if (fromDate) params.from_date = fromDate
       if (toDate) params.to_date = toDate
       const res = await api.getReport('general-ledger', params)
-      setData(res)
+      setEntries(res.entries || [])
     } catch (e) {
       console.error(e)
     }
   }
 
   useEffect(() => {
-    async function loadAccounts() {
-      try {
-        const accs = await api.list('Account', 1000)
-        setAccounts(accs || [])
-      } catch (e) {
-        console.error(e)
-      }
-    }
     loadAccounts()
     loadReport()
   }, [])
 
-  const entries = data?.entries || []
-  const totalDebit = entries.reduce((s: number, e: any) => s + Number(e.debit || 0), 0)
-  const totalCredit = entries.reduce((s: number, e: any) => s + Number(e.credit || 0), 0)
+  const totalDebit = entries.reduce((acc, e) => acc + (e.debit || 0), 0)
+  const totalCredit = entries.reduce((acc, e) => acc + (e.credit || 0), 0)
 
   function handleExportCSV() {
-    const headers = ['Date', 'Account', 'Party', 'Reference', 'Debit', 'Credit', 'Running Balance']
-    const rows = entries.map((e: any) => [
+    const headers = ['Date', 'Account', 'Party', 'Reference', 'Debit ($)', 'Credit ($)', 'Running Balance']
+    const rows = entries.map(e => [
       e.date,
       e.account,
       e.party || '',
-      `${e.reference_type || ''}: ${e.reference_name || ''}`,
+      `${e.reference_type}: ${e.reference_name}`,
       e.debit || 0,
       e.credit || 0,
       e.balance || 0,
@@ -72,24 +70,33 @@ export default function GeneralLedger() {
           <p className="text-sm text-gray-500 mt-1">Detailed double-entry view of all accounting ledger transactions</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="border-slate-300">
-            <Download className="w-4 h-4 mr-1.5" /> Export Excel / CSV
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export Excel / CSV
           </Button>
-          <Button size="sm" onClick={() => exportToPDF('General Ledger')} className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Printer className="w-4 h-4 mr-1.5" /> Export PDF
+          <Button
+            size="sm"
+            onClick={() => exportToPDF('General Ledger')}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export PDF
           </Button>
         </div>
       </div>
 
-      <Card className="no-print">
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
+      <Card className="no-print border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle className="text-black">Filters</CardTitle>
           <CardDescription>Refine ledger entries by account or date range</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[200px]">
-              <Label className="mb-1.5 block">Account</Label>
+              <Label className="mb-1.5 block text-black font-medium">Account</Label>
               <NativeSelect value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)}>
                 <option value="all">All Accounts</option>
                 {accounts.map(a => (
@@ -98,7 +105,7 @@ export default function GeneralLedger() {
               </NativeSelect>
             </div>
             <div>
-              <Label className="mb-1.5 block">From Date</Label>
+              <Label className="mb-1.5 block text-black font-medium">From Date</Label>
               <Input
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
@@ -107,7 +114,7 @@ export default function GeneralLedger() {
               />
             </div>
             <div>
-              <Label className="mb-1.5 block">To Date</Label>
+              <Label className="mb-1.5 block text-black font-medium">To Date</Label>
               <Input
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
@@ -115,7 +122,11 @@ export default function GeneralLedger() {
                 className="w-auto text-sm"
               />
             </div>
-            <Button size="sm" onClick={loadReport}>
+            <Button
+              size="sm"
+              onClick={loadReport}
+              className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+            >
               Apply
             </Button>
           </div>
@@ -123,54 +134,63 @@ export default function GeneralLedger() {
       </Card>
 
       {/* Main Container */}
-      <Card className="border-none bg-transparent shadow-none p-0">
-        <CardHeader className="border-none px-0 py-4 bg-transparent">
-          <CardTitle className="text-slate-900 font-bold">General Ledger Statement</CardTitle>
+      <Card className="border-0 bg-transparent shadow-none p-0">
+        <CardHeader className="border-0 px-0 py-4 bg-transparent">
+          <CardTitle className="text-black font-bold">General Ledger Statement</CardTitle>
           <CardDescription className="text-slate-500 font-medium">
             {filterAccount !== 'all' ? `Filtered by ${filterAccount}` : 'All accounts'} • {entries.length} transactions recorded
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 bg-transparent">
           {entries.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table className="w-full bg-transparent">
+            <div className="overflow-x-auto bg-transparent">
+              <Table className="w-full bg-transparent border-0">
                 <TableHeader>
-                  <TableRow className="border-b border-slate-300 bg-slate-100">
-                    <TableHead className="w-[100px] text-slate-900 font-bold">Date</TableHead>
-                    <TableHead className="text-slate-900 font-bold">Account</TableHead>
-                    <TableHead className="text-slate-900 font-bold">Party</TableHead>
-                    <TableHead className="text-slate-900 font-bold">Reference</TableHead>
-                    <TableHead className="text-right text-slate-900 font-bold">Debit ($)</TableHead>
-                    <TableHead className="text-right text-slate-900 font-bold">Credit ($)</TableHead>
-                    <TableHead className="text-right text-slate-900 font-bold">Running Balance</TableHead>
+                  <TableRow className="border-0 bg-transparent">
+                    <TableHead className="w-[100px] py-3 text-black font-bold">Date</TableHead>
+                    <TableHead className="py-3 text-black font-bold">Account</TableHead>
+                    <TableHead className="py-3 text-black font-bold">Party</TableHead>
+                    <TableHead className="py-3 text-black font-bold">Reference</TableHead>
+                    <TableHead className="text-right py-3 text-black font-bold">Debit ($)</TableHead>
+                    <TableHead className="text-right py-3 text-black font-bold">Credit ($)</TableHead>
+                    <TableHead className="text-right py-3 text-black font-bold">Running Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="bg-transparent">
                   {entries.map((entry: any, i: number) => (
-                    <TableRow key={i} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="text-sm text-slate-700">{entry.date}</TableCell>
-                      <TableCell className="font-semibold text-slate-900">{entry.account}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{entry.party || '—'}</TableCell>
-                      <TableCell className="text-sm text-slate-600">
+                    <TableRow key={i} className="border-0 bg-transparent">
+                      <TableCell className="py-3 text-sm text-black">{entry.date}</TableCell>
+                      <TableCell className="py-3 font-semibold text-black">{entry.account}</TableCell>
+                      <TableCell className="py-3 text-sm text-black">{entry.party || '—'}</TableCell>
+                      <TableCell className="py-3 text-sm text-black">
                         {entry.reference_type}: {entry.reference_name}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-900">
+                      <TableCell className="py-3 text-right font-mono text-sm text-black">
                         {entry.debit > 0 ? formatCurrency(entry.debit) : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-slate-900">
+                      <TableCell className="py-3 text-right font-mono text-sm text-black">
                         {entry.credit > 0 ? formatCurrency(entry.credit) : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-semibold text-slate-900">
+                      <TableCell className="py-3 text-right font-mono text-sm font-semibold text-black">
                         {formatCurrency(entry.balance)}
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Totals Summary Row */}
-                  <TableRow className="bg-transparent text-slate-900 font-bold border-t-2 border-b-2 border-slate-300">
-                    <TableCell colSpan={4} className="font-bold text-slate-900">TOTAL</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalDebit)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(totalCredit)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">—</TableCell>
+                  {/* Totals Summary Row - WITH TOP MARGIN & GREY BG */}
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell colSpan={7} className="p-0">
+                      <div className="mt-4 bg-slate-200 flex items-center justify-between pl-6 pr-6 py-3 font-bold text-black">
+                        <span className="font-bold text-black">TOTAL</span>
+                        <div className="flex items-center gap-12">
+                          <span className="font-mono font-bold text-black">
+                            Debit: {formatCurrency(totalDebit)}
+                          </span>
+                          <span className="font-mono font-bold text-black">
+                            Credit: {formatCurrency(totalCredit)}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

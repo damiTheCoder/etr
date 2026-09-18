@@ -34,6 +34,17 @@ def safe_float(val: Any, default: float = 0.0) -> float:
         return float(default)
 
 
+def get_rate_factor(doc: Doc) -> float:
+    exchange_rate = safe_float(doc.get("exchangeRate"), 1)
+    if exchange_rate <= 0:
+        return 1.0
+    currency = str(doc.get("currency") or "USD")
+    base_currency = str(doc.get("base_currency") or "USD")
+    if exchange_rate > 1 and (currency != base_currency or currency == "NGN"):
+        return 1.0 / exchange_rate
+    return exchange_rate
+
+
 class InvoiceModel(BaseModel):
     schema_name = "Invoice"
 
@@ -69,6 +80,7 @@ class InvoiceModel(BaseModel):
 
         items_data = doc.get("items", [])
         net_total = 0.0
+        rate_factor = get_rate_factor(doc)
 
         for item in items_data:
             if isinstance(item, dict):
@@ -87,11 +99,11 @@ class InvoiceModel(BaseModel):
                         new_item._not_inserted = True
                         db.insert_doc(new_item)
 
-                qty = safe_float(item.get("quantity"), 1)
+                qty = safe_float(item.get("quantity", item.get("qty")), 1)
                 rate = safe_float(item.get("rate"), 0)
                 amount = round(qty * rate, 2)
                 item["amount"] = amount
-                base_amount = round(amount * safe_float(doc.get("exchangeRate"), 1), 2)
+                base_amount = round(amount * rate_factor, 2)
                 item["baseAmount"] = base_amount
                 net_total += amount
 
@@ -135,8 +147,7 @@ class InvoiceModel(BaseModel):
         grand_total = round(discounted_total + tax_total, 2)
         doc._data["grandTotal"] = grand_total
 
-        exchange_rate = safe_float(doc.get("exchangeRate"), 1)
-        doc._data["baseGrandTotal"] = round(grand_total * exchange_rate, 2)
+        doc._data["baseGrandTotal"] = round(grand_total * rate_factor, 2)
 
         if not doc.get("submitted"):
             doc._data["outstandingAmount"] = grand_total
@@ -146,11 +157,11 @@ class InvoiceModel(BaseModel):
         posting = LedgerPosting(doc)
 
         is_sales = doc.schema_name == "SalesInvoice"
-        exchange_rate = safe_float(doc.get("exchangeRate"), 1)
+        rate_factor = get_rate_factor(doc)
         base_grand_total = round(safe_float(doc.get("baseGrandTotal"), 0), 2)
-        net_total = round(safe_float(doc.get("netTotal"), 0) * exchange_rate, 2)
-        discount = round(safe_float(doc.get("discountAmount"), 0) * exchange_rate, 2)
-        tax_total = round(safe_float(doc.get("taxTotal"), 0) * exchange_rate, 2)
+        net_total = round(safe_float(doc.get("netTotal"), 0) * rate_factor, 2)
+        discount = round(safe_float(doc.get("discountAmount"), 0) * rate_factor, 2)
+        tax_total = round(safe_float(doc.get("taxTotal"), 0) * rate_factor, 2)
 
         from backend.coa import resolve_account_name
 
@@ -170,18 +181,17 @@ class InvoiceModel(BaseModel):
             # Credit Sales for Gross Item Subtotal
             items_data = doc.get("items", [])
             if items_data:
-                item_credits_sum = 0.0
-                for idx, item in enumerate(items_data):
+                for item in items_data:
                     if isinstance(item, dict):
                         account = resolve_account_name(item.get("account") or "Sales")
                         item_base = item.get("baseAmount")
                         item_amt = item.get("amount")
-                        amount = round(safe_float(item_base if item_base is not None else item_amt, 0) * exchange_rate, 2)
-                        if idx == len(items_data) - 1:
-                            amount = round(net_total - item_credits_sum, 2)
+                        if item_base is not None:
+                            amount = round(safe_float(item_base, 0), 2)
+                        else:
+                            amount = round(safe_float(item_amt, 0) * rate_factor, 2)
                         if amount > 0:
                             posting.credit(account, amount)
-                            item_credits_sum += amount
             else:
                 if net_total > 0:
                     posting.credit("Sales", net_total)
@@ -200,18 +210,17 @@ class InvoiceModel(BaseModel):
 
             items_data = doc.get("items", [])
             if items_data:
-                item_debits_sum = 0.0
-                for idx, item in enumerate(items_data):
+                for item in items_data:
                     if isinstance(item, dict):
                         account = resolve_account_name(item.get("account") or "Cost of Goods Sold")
                         item_base = item.get("baseAmount")
                         item_amt = item.get("amount")
-                        amount = round(safe_float(item_base if item_base is not None else item_amt, 0) * exchange_rate, 2)
-                        if idx == len(items_data) - 1:
-                            amount = round(net_total - item_debits_sum, 2)
+                        if item_base is not None:
+                            amount = round(safe_float(item_base, 0), 2)
+                        else:
+                            amount = round(safe_float(item_amt, 0) * rate_factor, 2)
                         if amount > 0:
                             posting.debit(account, amount)
-                            item_debits_sum += amount
             else:
                 if net_total > 0:
                     posting.debit("Cost of Goods Sold", net_total)

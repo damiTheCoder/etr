@@ -25,6 +25,7 @@ import {
   PanelLeft,
   X,
   Sparkles,
+  Activity,
 } from 'lucide-react'
 
 import Dashboard from './pages/Dashboard'
@@ -44,6 +45,7 @@ import Reconciliations from './pages/Reconciliations'
 import ReconciliationForm from './pages/ReconciliationForm'
 import ProfitAndLoss from './pages/ProfitAndLoss'
 import BalanceSheet from './pages/BalanceSheet'
+import CashFlow from './pages/CashFlow'
 import GeneralLedger from './pages/GeneralLedger'
 import TrialBalance from './pages/TrialBalance'
 import ARAging from './pages/ARAging'
@@ -209,6 +211,15 @@ function AppLayout() {
             >
               <Scale className="w-5 h-5 shrink-0" />
               <span className={sidebarCollapsed ? 'md:hidden' : 'inline'}>Balance Sheet</span>
+            </Link>
+            <Link
+              to="/reports/cashflow"
+              title="Cash Flow"
+              onClick={() => setSidebarOpen(false)}
+              className={`sidebar-link ${isLinkActive('/reports/cashflow') || isLinkActive('/reports/cash-flow') ? 'sidebar-link-active' : 'sidebar-link-inactive'} ${sidebarCollapsed ? 'sidebar-link-collapsed' : ''}`}
+            >
+              <Activity className="w-5 h-5 shrink-0" />
+              <span className={sidebarCollapsed ? 'md:hidden' : 'inline'}>Cash Flow</span>
             </Link>
             <Link
               to="/reports/general-ledger"
@@ -380,6 +391,8 @@ function AppLayout() {
               <Route path="/reconciliations/new" element={<ReconciliationForm />} />
               <Route path="/reports/profit-and-loss" element={<ProfitAndLoss />} />
               <Route path="/reports/balance-sheet" element={<BalanceSheet />} />
+              <Route path="/reports/cashflow" element={<CashFlow />} />
+              <Route path="/reports/cash-flow" element={<CashFlow />} />
               <Route path="/reports/general-ledger" element={<GeneralLedger />} />
               <Route path="/reports/trial-balance" element={<TrialBalance />} />
               <Route path="/reports/ar-aging" element={<ARAging />} />

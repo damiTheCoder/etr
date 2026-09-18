@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Download, Printer, CheckCircle, AlertTriangle } from 'lucide-react'
 import { api } from '@/utils/api'
 import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
@@ -7,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-
 import { useCompany } from '@/context/CompanyContext'
 
 export default function TrialBalance() {
@@ -15,17 +13,6 @@ export default function TrialBalance() {
   const [data, setData] = useState<any>(null)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-
-  function rootTypeBadge(rt: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-    const map: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      Asset: 'default',
-      Liability: 'secondary',
-      Equity: 'outline',
-      Income: 'outline',
-      Expense: 'destructive',
-    }
-    return map[rt] || 'secondary'
-  }
 
   async function loadReport() {
     try {
@@ -43,27 +30,40 @@ export default function TrialBalance() {
     loadReport()
   }, [])
 
-  const accountsList = data?.accounts || []
+  function rootTypeBadge(type: string) {
+    switch (type) {
+      case 'Asset': return 'default'
+      case 'Liability': return 'secondary'
+      case 'Equity': return 'outline'
+      case 'Income': return 'default'
+      case 'Expense': return 'destructive'
+      default: return 'outline'
+    }
+  }
 
   function handleExportCSV() {
+    if (!data) return
     const headers = ['Account Number', 'Account Name', 'Root Type', 'Debit ($)', 'Credit ($)']
-    const rows = accountsList.map((row: any) => [
+    const rows = (data.accounts || []).map((row: any) => [
       row.accountNumber || '',
-      row.account,
-      row.rootType,
+      row.account || '',
+      row.rootType || '',
       row.debit || 0,
-      row.credit || 0,
+      row.credit || 0
     ])
-    rows.push(['', 'TOTAL', '', data?.totalDebit || 0, data?.totalCredit || 0])
+
+    rows.push(['', 'TOTAL', '', data.totalDebit || 0, data.totalCredit || 0])
     exportToCSV('Trial_Balance', headers, rows)
   }
+
+  const accountsList = data?.accounts || []
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Trial Balance</h1>
-          <p className="text-sm text-gray-500 mt-1">Verify that total debits equal total credits across all accounts</p>
+          <p className="text-sm text-gray-500 mt-1">Debit & credit verification across all ledger accounts</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
@@ -78,76 +78,100 @@ export default function TrialBalance() {
             type="date"
             className="w-auto text-sm"
           />
-          <Button size="sm" onClick={loadReport}>
+          <Button
+            size="sm"
+            onClick={loadReport}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
             Apply
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="border-slate-300">
-            <Download className="w-4 h-4 mr-1.5" /> Export Excel / CSV
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export Excel / CSV
           </Button>
-          <Button size="sm" onClick={() => exportToPDF('Trial Balance')} className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Printer className="w-4 h-4 mr-1.5" /> Export PDF
+          <Button
+            size="sm"
+            onClick={() => exportToPDF('Trial Balance')}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export PDF
           </Button>
         </div>
       </div>
 
-      <Card className="border-none bg-transparent shadow-none p-0">
-        <CardHeader className="border-none px-0 py-4 bg-transparent">
+      <Card className="border-0 bg-transparent shadow-none p-0">
+        <CardHeader className="border-0 px-0 py-4 bg-transparent">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-slate-900 font-bold">Trial Balance Summary</CardTitle>
+              <CardTitle className="text-black font-bold">Trial Balance Summary</CardTitle>
               <CardDescription className="text-slate-500 font-medium">
                 {accountsList.length} active accounts evaluated
               </CardDescription>
             </div>
             {data && (
-              <Badge variant={data.balanced ? 'default' : 'destructive'} className="text-xs px-3 py-1 font-semibold">
-                {data.balanced ? 'Balanced ✓' : 'Unbalanced ⚠️'}
+              <Badge variant="default" className="text-xs px-3 py-1 font-semibold text-black bg-transparent border-0">
+                {data.balanced ? 'Balanced' : 'Unbalanced'}
               </Badge>
             )}
           </div>
         </CardHeader>
         <CardContent className="p-0 bg-transparent">
-          <div className="overflow-x-auto">
-            <Table className="w-full bg-transparent">
+          <div className="overflow-x-auto bg-transparent">
+            <Table className="w-full bg-transparent border-0">
               <TableHeader>
-                <TableRow className="border-b border-slate-300 bg-slate-100">
-                  <TableHead className="w-[100px] text-slate-900 font-bold">Number</TableHead>
-                  <TableHead className="text-slate-900 font-bold">Account Name</TableHead>
-                  <TableHead className="w-[110px] text-slate-900 font-bold">Root Type</TableHead>
-                  <TableHead className="w-[140px] text-right text-slate-900 font-bold">Debit ($)</TableHead>
-                  <TableHead className="w-[140px] text-right text-slate-900 font-bold">Credit ($)</TableHead>
+                <TableRow className="border-0 bg-transparent">
+                  <TableHead className="w-[100px] py-3 text-black font-bold">Number</TableHead>
+                  <TableHead className="py-3 text-black font-bold">Account Name</TableHead>
+                  <TableHead className="w-[110px] py-3 text-black font-bold">Root Type</TableHead>
+                  <TableHead className="w-[140px] py-3 text-right text-black font-bold">Debit ($)</TableHead>
+                  <TableHead className="w-[140px] py-3 text-right text-black font-bold">Credit ($)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="bg-transparent">
                 {accountsList.map((row: any) => (
-                  <TableRow key={row.account} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                    <TableCell className="font-mono text-sm text-slate-600">{row.accountNumber || '—'}</TableCell>
-                    <TableCell className="font-semibold text-slate-900">{row.account}</TableCell>
-                    <TableCell>
-                      <Badge variant={rootTypeBadge(row.rootType)} className="text-xs">
+                  <TableRow key={row.account} className="border-0 bg-transparent">
+                    <TableCell className="py-3 font-mono text-sm text-black">{row.accountNumber || '—'}</TableCell>
+                    <TableCell className="py-3 font-semibold text-black">{row.account}</TableCell>
+                    <TableCell className="py-3">
+                      <Badge variant="outline" className="text-xs text-black border-slate-300">
                         {row.rootType}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm text-slate-900">
+                    <TableCell className="py-3 text-right font-mono text-sm text-black">
                       {row.debit > 0 ? formatCurrency(row.debit) : '—'}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm text-slate-900">
+                    <TableCell className="py-3 text-right font-mono text-sm text-black">
                       {row.credit > 0 ? formatCurrency(row.credit) : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
                 {accountsList.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-slate-500 py-16 bg-transparent">
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell colSpan={5} className="text-center text-slate-500 py-16 bg-transparent border-0">
                       No trial balance data available for the selected period
                     </TableCell>
                   </TableRow>
                 )}
+                {/* Total Row - WITH TOP MARGIN & GREY BG */}
                 {data && (
-                  <TableRow className="bg-transparent text-slate-900 font-bold border-t-2 border-b-2 border-slate-300">
-                    <TableCell colSpan={3} className="font-bold text-slate-900 text-right pr-4">TOTAL</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(data.totalDebit)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">{formatCurrency(data.totalCredit)}</TableCell>
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell colSpan={5} className="p-0">
+                      <div className="mt-4 bg-slate-200 flex items-center justify-between pl-6 pr-6 py-3 font-bold text-black">
+                        <span className="font-bold text-black">TOTAL</span>
+                        <div className="flex items-center gap-16">
+                          <span className="font-mono font-bold text-black">
+                            {formatCurrency(data.totalDebit)}
+                          </span>
+                          <span className="font-mono font-bold text-black">
+                            {formatCurrency(data.totalCredit)}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -157,16 +181,11 @@ export default function TrialBalance() {
           {data && (
             <div className="p-4 border-0 bg-transparent flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {data.balanced ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5 text-rose-600" />
-                )}
-                <span className={`text-sm font-semibold ${data.balanced ? 'text-emerald-800' : 'text-rose-800'}`}>
+                <span className="text-sm font-semibold text-black">
                   {data.balanced ? 'Trial Balance is in balance — Total Debits equal Total Credits' : 'Trial Balance Out of Balance — Check Journal Entries'}
                 </span>
               </div>
-              <div className="text-xs font-mono text-slate-700 font-semibold">
+              <div className="text-xs font-mono text-black font-semibold">
                 Net Variance: {formatCurrency(Math.abs((data.totalDebit || 0) - (data.totalCredit || 0)))}
               </div>
             </div>

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Download, Printer } from 'lucide-react'
 import { api } from '@/utils/api'
 import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
@@ -7,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-
 import { useCompany } from '@/context/CompanyContext'
 
 export default function BalanceSheet() {
@@ -78,125 +76,145 @@ export default function BalanceSheet() {
             type="date"
             className="w-auto text-sm"
           />
-          <Button size="sm" onClick={loadReport}>
+          <Button
+            size="sm"
+            onClick={loadReport}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
             Apply
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="border-slate-300">
-            <Download className="w-4 h-4 mr-1.5" /> Export Excel / CSV
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export Excel / CSV
           </Button>
-          <Button size="sm" onClick={() => exportToPDF('Balance Sheet')} className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Printer className="w-4 h-4 mr-1.5" /> Export PDF
+          <Button
+            size="sm"
+            onClick={() => exportToPDF('Balance Sheet')}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export PDF
           </Button>
         </div>
       </div>
 
       {data ? (
-        <Card className="border-none bg-transparent shadow-none p-0">
-          <CardHeader className="border-none px-0 py-4 bg-transparent">
+        <Card className="border-0 bg-transparent shadow-none p-0">
+          <CardHeader className="border-0 px-0 py-4 bg-transparent">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <CardTitle className="text-xl font-bold text-slate-900">Statement of Financial Position (Balance Sheet)</CardTitle>
+                <CardTitle className="text-xl font-bold text-black">Statement of Financial Position (Balance Sheet)</CardTitle>
                 <CardDescription className="text-xs text-slate-500 font-medium mt-1">
                   As of {toDate || new Date().toISOString().split('T')[0]} • Double-Entry Balanced
                 </CardDescription>
               </div>
-              <Badge variant={data.balanced ? 'default' : 'destructive'} className="w-fit text-xs px-3 py-1 font-semibold">
-                {data.balanced ? '✓ Balanced' : '⚠️ Out of Balance'}
+              <Badge variant="default" className="w-fit text-xs px-3 py-1 font-semibold text-black bg-transparent border-0">
+                {data.balanced ? 'Balanced' : 'Out of Balance'}
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="p-0 bg-transparent">
-            <div className="overflow-x-auto">
-              <Table className="w-full bg-transparent">
+            <div className="overflow-x-auto bg-transparent">
+              <Table className="w-full bg-transparent border-0">
                 <TableHeader>
-                  <TableRow className="border-b border-slate-300 bg-slate-100">
-                    <TableHead className="w-[60%] pl-6 text-slate-900 font-bold">Account Name & Category</TableHead>
-                    <TableHead className="text-right pr-6 text-slate-900 font-bold">Amount (USD)</TableHead>
+                  <TableRow className="border-0 bg-transparent">
+                    <TableHead className="w-[60%] pl-6 py-3 text-black font-bold">Account Name & Category</TableHead>
+                    <TableHead className="text-right pr-6 py-3 text-black font-bold">Amount (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="bg-transparent">
                   {/* ASSETS SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-slate-200/70">
-                    <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
+                  <TableRow className="font-bold text-black border-0 bg-transparent">
+                    <TableCell colSpan={2} className="pl-6 py-3 uppercase tracking-wider text-xs font-bold text-black">
                       1. ASSETS
                     </TableCell>
                   </TableRow>
                   {data.assets?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
-                      <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
+                    <TableRow key={a.name} className="border-0 bg-transparent">
+                      <TableCell className="pl-10 py-3 font-semibold text-black">{a.name}</TableCell>
+                      <TableCell className="text-right pr-6 py-3 font-mono text-black">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.assets?.accounts || data.assets.accounts.length === 0) && (
-                    <TableRow>
-                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-transparent">
+                    <TableRow className="border-0 bg-transparent">
+                      <TableCell colSpan={2} className="pl-10 py-3 text-slate-500 italic border-0 bg-transparent">
                         No asset accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-transparent font-bold border-t border-b border-slate-200">
-                    <TableCell className="pl-6 font-bold text-slate-900">Total Assets</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900 text-base">
+                  {/* Total Assets Row - HAS GREY BG */}
+                  <TableRow className="bg-slate-200 font-bold border-0 text-black">
+                    <TableCell className="pl-6 py-3 font-bold text-black">Total Assets</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-bold text-black text-base">
                       {formatCurrency(data.assets?.total)}
                     </TableCell>
                   </TableRow>
 
                   {/* LIABILITIES SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-slate-200/70">
-                    <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
+                  <TableRow className="font-bold text-black border-0 bg-transparent">
+                    <TableCell colSpan={2} className="pl-6 pt-5 pb-3 uppercase tracking-wider text-xs font-bold text-black">
                       2. LIABILITIES
                     </TableCell>
                   </TableRow>
                   {data.liabilities?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
-                      <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
+                    <TableRow key={a.name} className="border-0 bg-transparent">
+                      <TableCell className="pl-10 py-3 font-semibold text-black">{a.name}</TableCell>
+                      <TableCell className="text-right pr-6 py-3 font-mono text-black">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.liabilities?.accounts || data.liabilities.accounts.length === 0) && (
-                    <TableRow>
-                      <TableCell colSpan={2} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-transparent">
+                    <TableRow className="border-0 bg-transparent">
+                      <TableCell colSpan={2} className="pl-10 py-3 text-slate-500 italic border-0 bg-transparent">
                         No liability accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-transparent font-bold border-t border-b border-slate-200">
-                    <TableCell className="pl-6 font-bold text-slate-900">Total Liabilities</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900">
+                  {/* Total Liabilities Row - HAS GREY BG */}
+                  <TableRow className="bg-slate-200 font-bold border-0 text-black">
+                    <TableCell className="pl-6 py-3 font-bold text-black">Total Liabilities</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-bold text-black">
                       {formatCurrency(data.liabilities?.total)}
                     </TableCell>
                   </TableRow>
 
                   {/* EQUITY SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-slate-200/70">
-                    <TableCell colSpan={2} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
+                  <TableRow className="font-bold text-black border-0 bg-transparent">
+                    <TableCell colSpan={2} className="pl-6 pt-5 pb-3 uppercase tracking-wider text-xs font-bold text-black">
                       3. EQUITY
                     </TableCell>
                   </TableRow>
                   {data.equity?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
-                      <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
+                    <TableRow key={a.name} className="border-0 bg-transparent">
+                      <TableCell className="pl-10 py-3 font-semibold text-black">{a.name}</TableCell>
+                      <TableCell className="text-right pr-6 py-3 font-mono text-black">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
-                  <TableRow className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                    <TableCell className="pl-10 font-semibold text-slate-800">Current Period Net Profit / (Loss)</TableCell>
-                    <TableCell className={`text-right pr-6 font-mono font-semibold ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell className="pl-10 py-3 font-semibold text-black">Current Period Net Profit / (Loss)</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-semibold text-black">
                       {formatCurrency(data.netProfit)}
                     </TableCell>
                   </TableRow>
-                  <TableRow className="bg-transparent font-bold border-t border-b border-slate-200">
-                    <TableCell className="pl-6 font-bold text-slate-900">Total Equity</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900">
+                  {/* Total Equity Row - HAS GREY BG */}
+                  <TableRow className="bg-slate-200 font-bold border-0 text-black">
+                    <TableCell className="pl-6 py-3 font-bold text-black">Total Equity</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-bold text-black">
                       {formatCurrency(data.equity?.total)}
                     </TableCell>
                   </TableRow>
 
-                  {/* GRAND TOTAL SECTION */}
-                  <TableRow className="bg-transparent font-bold border-t-2 border-b-2 border-slate-300 text-base">
-                    <TableCell className="pl-6 font-bold text-slate-900">TOTAL LIABILITIES & EQUITY</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900 text-base">
-                      {formatCurrency((data.liabilities?.total || 0) + (data.equity?.total || 0))}
+                  {/* GRAND TOTAL SECTION - WITH TOP MARGIN & GREY BG */}
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell colSpan={2} className="p-0">
+                      <div className="mt-4 bg-slate-200 flex items-center justify-between pl-6 pr-6 py-3 font-bold text-base text-black">
+                        <span className="font-bold text-black">TOTAL LIABILITIES & EQUITY</span>
+                        <span className="font-mono font-bold text-base text-black">
+                          {formatCurrency((data.liabilities?.total || 0) + (data.equity?.total || 0))}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 </TableBody>

@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { api } from '@/utils/api'
+import { DEFAULT_IFRS_ACCOUNTS } from '@/utils/defaultAccounts'
 import { useCompany } from '@/context/CompanyContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,7 @@ interface RawData {
   sales: any[]
   purchases: any[]
   entries: any[]
+  accounts?: any[]
 }
 
 // Period selector dropdown component (Month & Year)
@@ -79,10 +81,244 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
 const getItemDate = (item: any) => String(item?.date || item?.posting_date || item?.postingDate || '')
 
 // Helper to check if an account is a Cash or Bank account
-const isCashAccount = (accountName: string) => {
+const isCashAccount = (accountName: string, accountsMap?: Map<string, any>) => {
   if (!accountName) return false
+  if (accountsMap?.has(accountName)) {
+    const acc = accountsMap.get(accountName)
+    if (acc?.accountType === 'Cash' || acc?.accountType === 'Bank') return true
+  }
   const lower = String(accountName).toLowerCase()
   return lower.includes('bank') || lower.includes('cash') || lower.includes('petty')
+}
+
+// Helper to check if an account is a Receivable account
+const isReceivableAccount = (accountName: string, accountsMap?: Map<string, any>) => {
+  if (!accountName) return false
+  if (accountsMap?.has(accountName)) {
+    const acc = accountsMap.get(accountName)
+    if (acc?.accountType === 'Receivable') return true
+  }
+  const lower = String(accountName).toLowerCase()
+  return lower.includes('debtor') || lower.includes('receivable')
+}
+
+// Helper to check if an account is a Payable account
+const isPayableAccount = (accountName: string, accountsMap?: Map<string, any>) => {
+  if (!accountName) return false
+  if (accountsMap?.has(accountName)) {
+    const acc = accountsMap.get(accountName)
+    if (acc?.accountType === 'Payable') return true
+  }
+  const lower = String(accountName).toLowerCase()
+  return lower.includes('creditor') || lower.includes('payable')
+}
+
+// Helper to check if an account is an Income account
+const isIncomeAccount = (accountName: string, accountsMap?: Map<string, any>) => {
+  if (!accountName) return false
+  if (accountsMap?.has(accountName)) {
+    const acc = accountsMap.get(accountName)
+    if (acc?.rootType === 'Income' || acc?.accountType === 'Income Account') return true
+    if (acc?.rootType && acc?.rootType !== 'Income') return false
+  }
+  const lower = String(accountName).toLowerCase()
+  return (
+    lower.includes('sales') ||
+    lower.includes('revenue') ||
+    lower.includes('income') ||
+    lower.includes('service') ||
+    lower.includes('fee') ||
+    lower.includes('gain') ||
+    lower.includes('royalty') ||
+    lower.includes('dividend')
+  )
+}
+
+// Helper to check if an account is an Expense account
+const isExpenseAccount = (accountName: string, accountsMap?: Map<string, any>) => {
+  if (!accountName) return false
+  if (accountsMap?.has(accountName)) {
+    const acc = accountsMap.get(accountName)
+    if (acc?.rootType === 'Expense' || acc?.accountType === 'Expense Account') return true
+    if (acc?.rootType && acc?.rootType !== 'Expense') return false
+  }
+  const lower = String(accountName).toLowerCase()
+  return (
+    lower.includes('expense') ||
+    lower.includes('cost of goods') ||
+    lower.includes('cogs') ||
+    lower.includes('salary') ||
+    lower.includes('wages') ||
+    lower.includes('rent') ||
+    lower.includes('depreciation') ||
+    lower.includes('amortization') ||
+    lower.includes('utility') ||
+    lower.includes('maintenance') ||
+    lower.includes('advertising') ||
+    lower.includes('marketing') ||
+    lower.includes('loss') ||
+    lower.includes('carriage')
+  )
+}
+
+// Calculate metric values for a given period date filter
+function calculateMetricForPeriod(
+  metric: 'cash' | 'revenue' | 'expenses' | 'profit' | 'ar' | 'ap',
+  dateStrFilter: string,
+  sales: any[],
+  purchases: any[],
+  entries: any[],
+  accountsMap: Map<string, any>
+): { val: number; targetVal: number } {
+  const isSubmitted = (item: any) =>
+    Boolean(item && (item.submitted === 1 || item.submitted === true || item.docstatus === 1) && !item.cancelled)
+
+  if (metric === 'cash') {
+    const periodEntries = entries.filter((e: any) => e && getItemDate(e).startsWith(dateStrFilter))
+    let val = 0
+    let targetVal = 0
+    for (const e of periodEntries) {
+      if (isCashAccount(e.account, accountsMap)) {
+        val += Number(e.debit || 0)
+        targetVal += Number(e.credit || 0)
+      }
+    }
+    return { val, targetVal }
+  }
+
+  if (metric === 'revenue') {
+    const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
+    const periodIncomeEntries = entries.filter(
+      (e: any) => e && getItemDate(e).startsWith(dateStrFilter) && isIncomeAccount(e.account, accountsMap)
+    )
+
+    let val = 0
+    let targetVal = 0
+
+    if (periodSales.length > 0) {
+      for (const s of periodSales) {
+        const grand = Number(s.grandTotal || s.baseGrandTotal || 0)
+        const outstanding = Number(s.outstandingAmount || 0)
+        val += grand
+        targetVal += Math.max(0, grand - outstanding)
+      }
+      for (const e of periodIncomeEntries) {
+        const ref = String(e.reference_type || '').toLowerCase()
+        if (ref !== 'salesinvoice' && ref !== 'sales invoice') {
+          const net = Math.max(0, Number(e.credit || 0) - Number(e.debit || 0))
+          val += net
+          targetVal += net
+        }
+      }
+    } else if (periodIncomeEntries.length > 0) {
+      for (const e of periodIncomeEntries) {
+        const net = Math.max(0, Number(e.credit || 0) - Number(e.debit || 0))
+        val += net
+      }
+      const voucherNames = new Set(periodIncomeEntries.map((e: any) => e.reference_name || e.name))
+      const relatedEntries = entries.filter((e: any) => voucherNames.has(e.reference_name || e.name))
+      let periodArDebits = 0
+      for (const re of relatedEntries) {
+        if (isReceivableAccount(re.account, accountsMap)) {
+          periodArDebits += Math.max(0, Number(re.debit || 0) - Number(re.credit || 0))
+        }
+      }
+      targetVal = Math.max(0, val - periodArDebits)
+    }
+
+    return { val, targetVal }
+  }
+
+  if (metric === 'expenses') {
+    const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+    const periodExpenseEntries = entries.filter(
+      (e: any) => e && getItemDate(e).startsWith(dateStrFilter) && isExpenseAccount(e.account, accountsMap)
+    )
+
+    let val = 0
+    let targetVal = 0
+
+    if (periodPurchases.length > 0) {
+      for (const p of periodPurchases) {
+        const grand = Number(p.grandTotal || p.baseGrandTotal || 0)
+        const outstanding = Number(p.outstandingAmount || 0)
+        val += grand
+        targetVal += Math.max(0, grand - outstanding)
+      }
+      for (const e of periodExpenseEntries) {
+        const ref = String(e.reference_type || '').toLowerCase()
+        if (ref !== 'purchaseinvoice' && ref !== 'purchase invoice') {
+          const net = Math.max(0, Number(e.debit || 0) - Number(e.credit || 0))
+          val += net
+          targetVal += net
+        }
+      }
+    } else if (periodExpenseEntries.length > 0) {
+      for (const e of periodExpenseEntries) {
+        const net = Math.max(0, Number(e.debit || 0) - Number(e.credit || 0))
+        val += net
+      }
+      const voucherNames = new Set(periodExpenseEntries.map((e: any) => e.reference_name || e.name))
+      const relatedEntries = entries.filter((e: any) => voucherNames.has(e.reference_name || e.name))
+      let periodApCredits = 0
+      for (const re of relatedEntries) {
+        if (isPayableAccount(re.account, accountsMap)) {
+          periodApCredits += Math.max(0, Number(re.credit || 0) - Number(re.debit || 0))
+        }
+      }
+      targetVal = Math.max(0, val - periodApCredits)
+    }
+
+    return { val, targetVal }
+  }
+
+  if (metric === 'profit') {
+    const rev = calculateMetricForPeriod('revenue', dateStrFilter, sales, purchases, entries, accountsMap)
+    const exp = calculateMetricForPeriod('expenses', dateStrFilter, sales, purchases, entries, accountsMap)
+    return { val: rev.val, targetVal: exp.val }
+  }
+
+  if (metric === 'ar') {
+    const periodEntries = entries.filter(
+      (e: any) => e && getItemDate(e).startsWith(dateStrFilter) && isReceivableAccount(e.account, accountsMap)
+    )
+    const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter)).filter(isSubmitted)
+    if (periodEntries.length > 0) {
+      const val = periodEntries.reduce((sum: number, e: any) => sum + Number(e.debit || 0), 0)
+      const targetVal = periodEntries.reduce(
+        (sum: number, e: any) => sum + Math.max(0, Number(e.debit || 0) - Number(e.credit || 0)),
+        0
+      )
+      return { val, targetVal }
+    } else {
+      const val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
+      const targetVal = periodSales.reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
+      return { val, targetVal }
+    }
+  }
+
+  if (metric === 'ap') {
+    const periodEntries = entries.filter(
+      (e: any) => e && getItemDate(e).startsWith(dateStrFilter) && isPayableAccount(e.account, accountsMap)
+    )
+    const periodPurchases = purchases
+      .filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
+      .filter(isSubmitted)
+    if (periodEntries.length > 0) {
+      const val = periodEntries.reduce((sum: number, e: any) => sum + Number(e.credit || 0), 0)
+      const targetVal = periodEntries.reduce(
+        (sum: number, e: any) => sum + Math.max(0, Number(e.credit || 0) - Number(e.debit || 0)),
+        0
+      )
+      return { val, targetVal }
+    } else {
+      const val = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
+      const targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
+      return { val, targetVal }
+    }
+  }
+
+  return { val: 0, targetVal: 0 }
 }
 
 // Build chart data for a given metric across all historical dates
@@ -94,7 +330,16 @@ function buildChartData(
   const sales = Array.isArray(rawData?.sales) ? rawData.sales : []
   const purchases = Array.isArray(rawData?.purchases) ? rawData.purchases : []
   const entries = Array.isArray(rawData?.entries) ? rawData.entries : []
-  const isSubmitted = (item: any) => Boolean(item && (item.submitted === 1 || item.submitted === true || item.docstatus === 1) && !item.cancelled)
+
+  const accountsMap = new Map<string, any>()
+  for (const acc of DEFAULT_IFRS_ACCOUNTS) {
+    accountsMap.set(acc.name, acc)
+  }
+  if (Array.isArray(rawData?.accounts)) {
+    for (const acc of rawData.accounts) {
+      if (acc?.name) accountsMap.set(acc.name, acc)
+    }
+  }
 
   const now = new Date()
   const dates: string[] = []
@@ -126,48 +371,14 @@ function buildChartData(
       const dateStrFilter = monthObj.toISOString().slice(0, 7)
       const label = monthObj.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
 
-      let val = 0
-      let targetVal = 0
-
-      if (metric === 'cash') {
-        const periodEntries = entries.filter((e: any) => e && getItemDate(e).startsWith(dateStrFilter))
-        for (const e of periodEntries) {
-          if (isCashAccount(e.account)) {
-            val += Number(e.debit || 0)
-            targetVal += Number(e.credit || 0)
-          }
-        }
-      } else if (metric === 'revenue') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
-        for (const s of periodSales) {
-          const grand = Number(s.grandTotal || s.baseGrandTotal || 0)
-          const outstanding = Number(s.outstandingAmount || 0)
-          val += grand
-          targetVal += Math.max(0, grand - outstanding)
-        }
-      } else if (metric === 'expenses') {
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
-        for (const p of periodPurchases) {
-          const grand = Number(p.grandTotal || p.baseGrandTotal || 0)
-          const outstanding = Number(p.outstandingAmount || 0)
-          val += grand
-          targetVal += Math.max(0, grand - outstanding)
-        }
-      } else if (metric === 'profit') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
-        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-      } else if (metric === 'ar') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter)).filter(isSubmitted)
-        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        targetVal = periodSales.reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
-      } else if (metric === 'ap') {
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter)).filter(isSubmitted)
-        val = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
-      }
-
+      const { val, targetVal } = calculateMetricForPeriod(
+        metric,
+        dateStrFilter,
+        sales,
+        purchases,
+        entries,
+        accountsMap
+      )
       points.push({ label, value: Math.round(val), target: Math.round(targetVal) })
     }
   } else {
@@ -183,48 +394,14 @@ function buildChartData(
       const dateStrFilter = String(y)
       const label = String(y)
 
-      let val = 0
-      let targetVal = 0
-
-      if (metric === 'cash') {
-        const periodEntries = entries.filter((e: any) => e && getItemDate(e).startsWith(dateStrFilter))
-        for (const e of periodEntries) {
-          if (isCashAccount(e.account)) {
-            val += Number(e.debit || 0)
-            targetVal += Number(e.credit || 0)
-          }
-        }
-      } else if (metric === 'revenue') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
-        for (const s of periodSales) {
-          const grand = Number(s.grandTotal || s.baseGrandTotal || 0)
-          const outstanding = Number(s.outstandingAmount || 0)
-          val += grand
-          targetVal += Math.max(0, grand - outstanding)
-        }
-      } else if (metric === 'expenses') {
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
-        for (const p of periodPurchases) {
-          const grand = Number(p.grandTotal || p.baseGrandTotal || 0)
-          const outstanding = Number(p.outstandingAmount || 0)
-          val += grand
-          targetVal += Math.max(0, grand - outstanding)
-        }
-      } else if (metric === 'profit') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter))
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter))
-        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-      } else if (metric === 'ar') {
-        const periodSales = sales.filter((s: any) => s && getItemDate(s).startsWith(dateStrFilter)).filter(isSubmitted)
-        val = periodSales.reduce((sum: number, s: any) => sum + Number(s.grandTotal || s.baseGrandTotal || 0), 0)
-        targetVal = periodSales.reduce((sum: number, s: any) => sum + Number(s.outstandingAmount || 0), 0)
-      } else if (metric === 'ap') {
-        const periodPurchases = purchases.filter((p: any) => p && getItemDate(p).startsWith(dateStrFilter)).filter(isSubmitted)
-        val = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.grandTotal || p.baseGrandTotal || 0), 0)
-        targetVal = periodPurchases.reduce((sum: number, p: any) => sum + Number(p.outstandingAmount || 0), 0)
-      }
-
+      const { val, targetVal } = calculateMetricForPeriod(
+        metric,
+        dateStrFilter,
+        sales,
+        purchases,
+        entries,
+        accountsMap
+      )
       points.push({ label, value: Math.round(val), target: Math.round(targetVal) })
     }
   }
@@ -289,13 +466,14 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [sales, purchases, pl, ledger, bs, tb] = await Promise.all([
+        const [sales, purchases, pl, ledger, bs, tb, accounts] = await Promise.all([
           api.list('SalesInvoice'),
           api.list('PurchaseInvoice'),
           api.getReport('profit-and-loss'),
           api.getReport('general-ledger'),
           api.getReport('balance-sheet'),
           api.getReport('trial-balance'),
+          api.list('Account').catch(() => []),
         ])
 
         const isSubmitted = (item: any) => Boolean(item && (item.submitted === 1 || item.submitted === true || item.docstatus === 1) && !item.cancelled)
@@ -311,12 +489,72 @@ export default function Dashboard() {
           sales: submittedSales,
           purchases: submittedPurchases,
           entries: allEntries,
+          accounts: Array.isArray(accounts) ? accounts : [],
         })
 
         const rev = (pl as any)?.income?.total ?? submittedSales.reduce((acc: number, item: any) => acc + Number(item.grandTotal || item.baseGrandTotal || 0), 0)
         const exp = (pl as any)?.expenses?.total ?? submittedPurchases.reduce((acc: number, item: any) => acc + Number(item.grandTotal || item.baseGrandTotal || 0), 0)
-        const ar = submittedSales.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
-        const ap = submittedPurchases.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
+        // Accounts Receivable from accounting ledger / balance sheet / trial balance
+        let ar = 0
+        let foundArAccounting = false
+        if (bs?.assets?.accounts && Array.isArray(bs.assets.accounts)) {
+          for (const acct of bs.assets.accounts) {
+            if (isReceivableAccount(acct.name) || acct.accountType === 'Receivable') {
+              ar += Number(acct.balance || 0)
+              foundArAccounting = true
+            }
+          }
+        }
+        if (!foundArAccounting && tb?.accounts && Array.isArray(tb.accounts)) {
+          for (const acct of tb.accounts) {
+            if (isReceivableAccount(acct.account) || acct.accountType === 'Receivable') {
+              ar += Number(acct.debit || 0) - Number(acct.credit || 0)
+              foundArAccounting = true
+            }
+          }
+        }
+        if (!foundArAccounting && allEntries.length > 0) {
+          for (const entry of allEntries) {
+            if (isReceivableAccount(entry.account)) {
+              ar += Number(entry.debit || 0) - Number(entry.credit || 0)
+              foundArAccounting = true
+            }
+          }
+        }
+        if (!foundArAccounting) {
+          ar = submittedSales.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
+        }
+
+        // Accounts Payable from accounting ledger / balance sheet / trial balance
+        let ap = 0
+        let foundApAccounting = false
+        if (bs?.liabilities?.accounts && Array.isArray(bs.liabilities.accounts)) {
+          for (const acct of bs.liabilities.accounts) {
+            if (isPayableAccount(acct.name) || acct.accountType === 'Payable') {
+              ap += Number(acct.balance || 0)
+              foundApAccounting = true
+            }
+          }
+        }
+        if (!foundApAccounting && tb?.accounts && Array.isArray(tb.accounts)) {
+          for (const acct of tb.accounts) {
+            if (isPayableAccount(acct.account) || acct.accountType === 'Payable') {
+              ap += Number(acct.credit || 0) - Number(acct.debit || 0)
+              foundApAccounting = true
+            }
+          }
+        }
+        if (!foundApAccounting && allEntries.length > 0) {
+          for (const entry of allEntries) {
+            if (isPayableAccount(entry.account)) {
+              ap += Number(entry.credit || 0) - Number(entry.debit || 0)
+              foundApAccounting = true
+            }
+          }
+        }
+        if (!foundApAccounting) {
+          ap = submittedPurchases.reduce((acc: number, item: any) => acc + Number(item.outstandingAmount || 0), 0)
+        }
 
         setTotalRevenue(rev)
         setTotalExpenses(exp)
@@ -393,18 +631,24 @@ export default function Dashboard() {
   const arChartData = useMemo(() => buildChartData(rawData, 'ar', arPeriod), [rawData, arPeriod])
   const apChartData = useMemo(() => buildChartData(rawData, 'ap', apPeriod), [rawData, apPeriod])
 
-  const getTrend = (chartData: ChartPoint[]) => {
+  const getTrend = (chartData: ChartPoint[], period: Period) => {
     if (chartData.length < 2) return { percent: 0, isUp: true }
-    const curr = chartData[chartData.length - 1]?.value || 0
-    const prev = chartData[chartData.length - 2]?.value || 0
+    const now = new Date()
+    const nowLabel = period === 'year'
+      ? String(now.getFullYear())
+      : now.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    const currentIndex = chartData.findIndex(d => d.label === nowLabel)
+    const activeIndex = currentIndex >= 0 ? currentIndex : chartData.length - 1
+    const curr = chartData[activeIndex]?.value || 0
+    const prev = activeIndex > 0 ? (chartData[activeIndex - 1]?.value || 0) : 0
     if (prev === 0) return { percent: curr > 0 ? 100 : 0, isUp: curr >= 0 }
     const diff = ((curr - prev) / Math.abs(prev)) * 100
     return { percent: Math.abs(Math.round(diff * 10) / 10), isUp: diff >= 0 }
   }
 
-  const cashTrend = getTrend(cashChartData)
-  const revenueTrend = getTrend(revenueChartData)
-  const expensesTrend = getTrend(expensesChartData)
+  const cashTrend = getTrend(cashChartData, cashPeriod)
+  const revenueTrend = getTrend(revenueChartData, revenuePeriod)
+  const expensesTrend = getTrend(expensesChartData, expensesPeriod)
 
   function renderChart(
     data: ChartPoint[],
@@ -615,7 +859,7 @@ export default function Dashboard() {
               {accountsReceivable > 0 ? 'Pending customer payments' : 'All receivables collected'}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </div>
-            <div className="text-slate-400 text-[11px]">Sum of outstanding amounts on submitted sales invoices</div>
+            <div className="text-slate-400 text-[11px]">Outstanding balance from General Ledger & invoices</div>
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">
@@ -637,7 +881,7 @@ export default function Dashboard() {
               {accountsPayable > 0 ? 'Pending vendor payments' : 'All payables settled'}
               <ArrowDownRight className="h-3.5 w-3.5" />
             </div>
-            <div className="text-slate-400 text-[11px]">Sum of outstanding amounts on submitted purchase invoices</div>
+            <div className="text-slate-400 text-[11px]">Outstanding balance from General Ledger & bills</div>
           </CardHeader>
           <CardContent className="px-4 pb-5 pt-2">
             <div className="h-[180px] w-full">

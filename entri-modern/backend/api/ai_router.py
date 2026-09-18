@@ -8,6 +8,7 @@ import json
 import asyncio
 import time
 import httpx
+import re
 from datetime import date as date_cls
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
@@ -456,10 +457,17 @@ def _execute_get_sales_invoices(customer: str = "", limit: int = 10):
     res = [inv.to_dict() for inv in invoices]
     return {"invoices": res, "total": len(res)}
 
-def _execute_create_sales_invoice(customer: str, items: list, date: str = None, date_str: str = None):
-    d_str = date or date_str or date_cls.today().isoformat()
-    _execute_create_party(name=customer, party_type="Customer")
+def _generate_doc_name(prefix: str, schema_name: str) -> str:
+    """Generate a unique document name using SingleValue counter and checking database for collisions."""
+    conn = db.get_connection()
+    name = db._get_next_series_number(conn, prefix)
+    while db.get_doc(schema_name, name):
+        name = db._get_next_series_number(conn, prefix)
+    return name
 
+
+def _execute_create_sales_invoice(customer: str, items: list, date: str = ""):
+    d_str = date or date_cls.today().isoformat()
     formatted_items = []
     grand_total = 0.0
     for idx, it in enumerate(items, 1):
@@ -476,12 +484,7 @@ def _execute_create_sales_invoice(customer: str, items: list, date: str = None, 
             "amount": amount
         })
 
-    series = db.get_doc("NumberSeries", "SINV-")
-    curr = series.get("current", 0) + 1 if series else 1
-    if series:
-        series.current = curr
-        db.update_doc(series)
-    inv_name = f"SINV-{curr:05d}"
+    inv_name = _generate_doc_name("SINV-", "SalesInvoice")
 
     inv_doc = Doc("SalesInvoice", {
         "name": inv_name,
@@ -536,12 +539,7 @@ def _execute_create_purchase_invoice(supplier: str, items: list, date: str = Non
             "amount": amount
         })
 
-    series = db.get_doc("NumberSeries", "PINV-")
-    curr = series.get("current", 0) + 1 if series else 1
-    if series:
-        series.current = curr
-        db.update_doc(series)
-    inv_name = f"PINV-{curr:05d}"
+    inv_name = _generate_doc_name("PINV-", "PurchaseInvoice")
 
     inv_doc = Doc("PurchaseInvoice", {
         "name": inv_name,
@@ -577,12 +575,7 @@ def _execute_get_payments(party: str = "", limit: int = 10):
     return {"payments": res, "total": len(res)}
 
 def _execute_create_payment(party: str, amount: float, payment_type: str = "Receive", reference: str = ""):
-    series = db.get_doc("NumberSeries", "PE-")
-    curr = series.get("current", 0) + 1 if series else 1
-    if series:
-        series.current = curr
-        db.update_doc(series)
-    pay_name = f"PE-{curr:05d}"
+    pay_name = _generate_doc_name("PE-", "PaymentEntry")
 
     doc = Doc("PaymentEntry", {
         "name": pay_name,
@@ -616,12 +609,7 @@ def _execute_get_journal_entries(limit: int = 10):
     return {"journal_entries": res, "total": len(res)}
 
 def _execute_create_journal_entry(entries: list, remark: str = ""):
-    series = db.get_doc("NumberSeries", "JV-")
-    curr = series.get("current", 0) + 1 if series else 1
-    if series:
-        series.current = curr
-        db.update_doc(series)
-    jv_name = f"JV-{curr:05d}"
+    jv_name = _generate_doc_name("JV-", "JournalEntry")
 
     formatted_accounts = []
     total_debit = 0.0
@@ -712,12 +700,7 @@ def _execute_create_purchase_order(supplier: str, items: list, date: str = None)
             "amount": amount
         })
 
-    series = db.get_doc("NumberSeries", "PO-")
-    curr = series.get("current", 0) + 1 if series else 1
-    if series:
-        series.current = curr
-        db.update_doc(series)
-    po_name = f"PO-{curr:05d}"
+    po_name = _generate_doc_name("PO-", "PurchaseOrder")
 
     doc = Doc("PurchaseOrder", {
         "name": po_name,
@@ -828,6 +811,9 @@ def _local_fast_route_matcher(text: str):
         "ap aging": "/reports/ap-aging",
         "tax summary": "/reports/tax-summary",
         "close checklist": "/reports/close-checklist",
+        "cash flow": "/reports/cashflow",
+        "cashflow": "/reports/cashflow",
+        "cash flow statement": "/reports/cashflow",
         "parties": "/parties",
         "customers": "/parties",
         "suppliers": "/parties",
@@ -923,6 +909,35 @@ def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: O
             f"- **Total Assets**: ${ast:,.2f}\n"
             f"- **Total Liabilities**: ${liab:,.2f}\n"
             f"- **Total Equity**: ${eq:,.2f}"
+        )
+
+    if tool_name == "get_trial_balance":
+        td = result.get("totalDebit", result.get("total_debit", 0.0))
+        tc = result.get("totalCredit", result.get("total_credit", 0.0))
+        balanced = result.get("balanced", td == tc)
+        status_text = "Balanced ✅" if balanced else "Unbalanced ⚠️"
+        return (
+            f"### ⚖️ Trial Balance Statement\n"
+            f"- **Status**: {status_text}\n"
+            f"- **Total Debits**: ${td:,.2f}\n"
+            f"- **Total Credits**: ${tc:,.2f}"
+        )
+
+    if tool_name == "get_general_ledger":
+        entries = result.get("entries", [])
+        total = result.get("total", len(entries))
+        return f"### 📒 General Ledger\nRetrieved **{total}** ledger transaction entry/entries."
+
+    if tool_name == "get_aging_report":
+        total = result.get("total", 0.0)
+        periods = result.get("periods", {})
+        return (
+            f"### ⏳ Aging Breakdown\n"
+            f"- **Total Outstanding**: ${total:,.2f}\n"
+            f"- **0-30 Days**: ${periods.get('0_30', 0.0):,.2f}\n"
+            f"- **31-60 Days**: ${periods.get('31_60', 0.0):,.2f}\n"
+            f"- **61-90 Days**: ${periods.get('61_90', 0.0):,.2f}\n"
+            f"- **90+ Days**: ${periods.get('over_90', 0.0):,.2f}"
         )
 
     if "message" in result:
@@ -1201,7 +1216,7 @@ async def ai_chat_endpoint(req: ChatRequest):
     model_id = os.environ.get("OPENROUTER_MODEL") or MODEL_ID
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=15.0, connect=3.0)) as client:
             for step in range(3):
                 body = {
                     "model": model_id,

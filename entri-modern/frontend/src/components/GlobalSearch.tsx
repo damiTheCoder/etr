@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   ArrowRight,
   X,
+  Activity,
 } from 'lucide-react'
 import { api } from '@/utils/api'
 import { useCompany } from '@/context/CompanyContext'
@@ -51,6 +52,7 @@ const STATIC_PAGES: SearchResultItem[] = [
   { id: 'p-recon', title: 'Bank Reconciliations', subtitle: 'Reconcile bank & cash statements', category: 'Pages', url: '/reconciliations', icon: <Landmark className="w-4 h-4 text-cyan-600" /> },
   { id: 'r-pnl', title: 'Profit & Loss Statement', subtitle: 'Income, expense, and net profit report', category: 'Pages', url: '/reports/profit-and-loss', icon: <TrendingUp className="w-4 h-4 text-blue-600" /> },
   { id: 'r-bs', title: 'Balance Sheet', subtitle: 'Assets, liabilities & equity statement', category: 'Pages', url: '/reports/balance-sheet', icon: <Scale className="w-4 h-4 text-blue-600" /> },
+  { id: 'r-cf', title: 'Cash Flow Statement', subtitle: 'Operating, investing & financing cash flows (IAS 7)', category: 'Pages', url: '/reports/cashflow', icon: <Activity className="w-4 h-4 text-blue-600" /> },
   { id: 'r-gl', title: 'General Ledger', subtitle: 'Detailed ledger entries view', category: 'Pages', url: '/reports/general-ledger', icon: <BookMarked className="w-4 h-4 text-blue-600" /> },
   { id: 'r-tb', title: 'Trial Balance', subtitle: 'Debit & credit balance verification', category: 'Pages', url: '/reports/trial-balance', icon: <Calculator className="w-4 h-4 text-blue-600" /> },
   { id: 'r-ar', title: 'Accounts Receivable Aging', subtitle: 'Customer aging analysis', category: 'Pages', url: '/reports/ar-aging', icon: <Clock className="w-4 h-4 text-blue-600" /> },

@@ -65,7 +65,7 @@ app = FastAPI(title="entri API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -433,7 +433,277 @@ def profit_and_loss(from_date: Optional[str] = None, to_date: Optional[str] = No
     }
 
 
+def _is_cash_or_bank_account(account_name: str, account_doc: Optional[dict] = None) -> bool:
+    """Determine if an account is a cash or cash equivalent account."""
+    if not account_name:
+        return False
+    if account_doc:
+        acct_type = str(account_doc.get("accountType", "")).lower()
+        if acct_type in ["cash", "bank"]:
+            return True
+    lower = account_name.lower()
+    return any(k in lower for k in ["cash", "bank", "petty"])
+
+
+@app.get("/api/reports/cash-flow")
+@app.get("/api/reports/cashflow")
+def cash_flow_statement(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    company_id: str = "default_company"
+):
+    """
+    Standard IAS 7 Cash Flow Statement.
+    Presents:
+    1. Cash flows from Operating Activities (Net Profit + non-cash adjustments + working capital changes)
+    2. Cash flows from Investing Activities (Fixed assets & PPE acquisitions/disposals, investments)
+    3. Cash flows from Financing Activities (Owner drawings, capital contributions, borrowings/debt)
+    4. Summary of Cash and Cash Equivalents (Beginning balance, Net change, Ending balance, Reconciliation).
+    """
+    from backend.models.settings_model import get_company_settings
+    settings = get_company_settings(company_id)
+
+    # 1. Fetch all accounts and build metadata cache
+    all_accounts = {a.get("name"): a for a in db.get_all_docs("Account", {})}
+
+    # 2. Compute Beginning Cash (all transactions prior to from_date)
+    beginning_cash = 0.0
+    beginning_cash_breakdown = []
+    if from_date:
+        prior_summaries = _get_ledger_summaries(to_date=None) # get all, filter < from_date manually or via summaries
+        # Specifically filter before from_date
+        prior_entries = db.get_ledger_entries()
+        prior_balances: dict[str, float] = {}
+        for entry in prior_entries:
+            if entry.get("reverted"):
+                continue
+            entry_date = entry.get("date", "")
+            if entry_date and entry_date < from_date:
+                acct = entry.get("account", "")
+                if not acct:
+                    continue
+                debit = safe_float(entry.get("debit"), 0)
+                credit = safe_float(entry.get("credit"), 0)
+                prior_balances[acct] = prior_balances.get(acct, 0.0) + (debit - credit)
+
+        for acct_name, bal in prior_balances.items():
+            acct_doc = all_accounts.get(acct_name)
+            if _is_cash_or_bank_account(acct_name, acct_doc):
+                beginning_cash += bal
+                beginning_cash_breakdown.append({"account": acct_name, "balance": round(bal, 2)})
+
+    # 3. Period Ledger Summaries
+    period_summaries = _get_ledger_summaries(from_date, to_date)
+
+    # Calculate Operating Net Profit for the period
+    period_income = 0.0
+    period_expenses = 0.0
+    for acct_name, summary in period_summaries.items():
+        acct_doc = all_accounts.get(acct_name)
+        root_type = acct_doc.get("rootType", "") if acct_doc else _get_root_type(acct_name)
+        if root_type == "Income":
+            period_income += (summary["credit"] - summary["debit"])
+        elif root_type == "Expense":
+            period_expenses += (summary["debit"] - summary["credit"])
+
+    net_profit = period_income - period_expenses
+
+    # Non-cash adjustments (Depreciation, Amortization)
+    non_cash_adjustments = []
+    total_non_cash = 0.0
+
+    # Working capital changes (Receivables, Inventory/Stock, Payables, Taxes Payable, Other Current Liabilities)
+    working_capital_items = []
+    total_working_capital = 0.0
+
+    # Investing activities items (Fixed Assets, Capital WIP, Intangibles, Long-term Investments)
+    investing_items = []
+    total_investing = 0.0
+
+    # Financing activities items (Share Capital, Owner's Equity/Drawings, Dividends, Loans/Borrowings)
+    financing_items = []
+    total_financing = 0.0
+
+    # Cash account net flow (actual change in cash/bank accounts during period)
+    actual_cash_change = 0.0
+    cash_accounts_breakdown = []
+
+    for acct_name, summary in period_summaries.items():
+        acct_doc = all_accounts.get(acct_name)
+        root_type = acct_doc.get("rootType", "") if acct_doc else _get_root_type(acct_name)
+        acct_type = acct_doc.get("accountType", "") if acct_doc else ""
+
+        debit = summary["debit"]
+        credit = summary["credit"]
+        net_change_asset_view = debit - credit
+        net_change_liability_view = credit - debit
+
+        if _is_cash_or_bank_account(acct_name, acct_doc):
+            actual_cash_change += net_change_asset_view
+            cash_accounts_breakdown.append({
+                "account": acct_name,
+                "net_change": round(net_change_asset_view, 2)
+            })
+            continue
+
+        lower_name = acct_name.lower()
+        lower_type = acct_type.lower()
+
+        # Non-cash expense adjustments in Operating activities:
+        if root_type == "Expense" and ("depreciation" in lower_name or "amortization" in lower_name or "depreciation" in lower_type):
+            exp_amt = debit - credit
+            if exp_amt != 0:
+                non_cash_adjustments.append({
+                    "item": f"Depreciation & Amortization ({acct_name})",
+                    "account": acct_name,
+                    "amount": round(exp_amt, 2)
+                })
+                total_non_cash += exp_amt
+            continue
+
+        # Accumulated depreciation/amortization contra-assets
+        if "accumulated depreciation" in lower_name or "accumulated amortization" in lower_name:
+            contra_amt = credit - debit
+            if contra_amt != 0:
+                non_cash_adjustments.append({
+                    "item": f"Provision for {acct_name}",
+                    "account": acct_name,
+                    "amount": round(contra_amt, 2)
+                })
+                total_non_cash += contra_amt
+            continue
+
+        # Operating Working Capital Changes:
+        # 1. Receivables: Increase in Asset = Outflow (-), Decrease in Asset = Inflow (+)
+        if root_type == "Asset" and ("receivable" in lower_type or "debtor" in lower_name or "receivable" in lower_name):
+            cash_impact = -(net_change_asset_view)
+            if cash_impact != 0:
+                label = f"(Increase) / Decrease in {acct_name}"
+                working_capital_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_working_capital += cash_impact
+            continue
+
+        # 2. Stock / Inventory: Increase in Inventory = Outflow (-), Decrease = Inflow (+)
+        if root_type == "Asset" and ("stock" in lower_type or "stock" in lower_name or "inventory" in lower_name or "goods" in lower_name or "materials" in lower_name):
+            cash_impact = -(net_change_asset_view)
+            if cash_impact != 0:
+                label = f"(Increase) / Decrease in {acct_name}"
+                working_capital_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_working_capital += cash_impact
+            continue
+
+        # 3. Prepayments & Advances: Increase = Outflow (-), Decrease = Inflow (+)
+        if root_type == "Asset" and ("prepayment" in lower_type or "prepaid" in lower_name or "advance" in lower_name):
+            cash_impact = -(net_change_asset_view)
+            if cash_impact != 0:
+                label = f"(Increase) / Decrease in {acct_name}"
+                working_capital_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_working_capital += cash_impact
+            continue
+
+        # 4. Payables & Current Liabilities: Increase in Liability = Inflow (+), Decrease = Outflow (-)
+        if root_type == "Liability" and ("payable" in lower_type or "creditor" in lower_name or "payable" in lower_name or "accrued" in lower_name):
+            cash_impact = net_change_liability_view
+            if cash_impact != 0:
+                label = f"Increase / (Decrease) in {acct_name}"
+                working_capital_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_working_capital += cash_impact
+            continue
+
+        # 5. Tax Payable / Liabilities
+        if root_type == "Liability" and ("tax" in lower_type or "tax" in lower_name or "vat" in lower_name or "duties" in lower_name):
+            cash_impact = net_change_liability_view
+            if cash_impact != 0:
+                label = f"Increase / (Decrease) in {acct_name}"
+                working_capital_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_working_capital += cash_impact
+            continue
+
+        # Investing Activities:
+        # Purchase of PPE/Fixed Assets / Intangibles = Outflow (-), Sale/Disposal = Inflow (+)
+        if root_type == "Asset" and any(k in lower_type or k in lower_name for k in ["fixed asset", "equipment", "machinery", "furniture", "vehicle", "building", "land", "intangible", "software", "patent", "goodwill", "investment", "capital work in progress"]):
+            cash_impact = -(net_change_asset_view)
+            if cash_impact != 0:
+                label = f"Capital Expenditure / Investment in {acct_name}" if cash_impact < 0 else f"Proceeds from Disposal / Realization of {acct_name}"
+                investing_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_investing += cash_impact
+            continue
+
+        # Financing Activities:
+        # 1. Equity: Capital Stock, Share Capital, Owner's Capital, Reserves
+        if root_type == "Equity":
+            if "drawing" in lower_name or "dividend" in lower_name:
+                cash_impact = -(debit - credit)
+                if cash_impact != 0:
+                    label = f"Drawings / Dividends Paid ({acct_name})"
+                    financing_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                    total_financing += cash_impact
+            elif "retained earnings" not in lower_name and "opening balance equity" not in lower_name:
+                cash_impact = net_change_liability_view
+                if cash_impact != 0:
+                    label = f"Capital Inflow / (Repurchase) - {acct_name}" if cash_impact > 0 else f"Reduction in {acct_name}"
+                    financing_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                    total_financing += cash_impact
+            continue
+
+        # 2. Long-term Debt & Bank Loans
+        if root_type == "Liability" and any(k in lower_name or k in lower_type for k in ["loan", "borrowing", "debt", "bond", "debenture"]):
+            cash_impact = net_change_liability_view
+            if cash_impact != 0:
+                label = f"Proceeds from / (Repayment of) {acct_name}"
+                financing_items.append({"item": label, "account": acct_name, "amount": round(cash_impact, 2)})
+                total_financing += cash_impact
+            continue
+
+    total_operating = net_profit + total_non_cash + total_working_capital
+    net_cash_flow = total_operating + total_investing + total_financing
+    ending_cash = beginning_cash + actual_cash_change
+
+    # If beginning cash is zero (e.g. no from_date set), ending cash is the sum of cash/bank balances
+    if not from_date:
+        all_time_summaries = _get_ledger_summaries(to_date=to_date)
+        all_time_cash = 0.0
+        for a_name, s in all_time_summaries.items():
+            a_doc = all_accounts.get(a_name)
+            if _is_cash_or_bank_account(a_name, a_doc):
+                all_time_cash += (s["debit"] - s["credit"])
+        ending_cash = all_time_cash
+        beginning_cash = ending_cash - actual_cash_change
+
+    return {
+        "company_name": settings.company.name,
+        "currency": settings.company.base_currency,
+        "from_date": from_date,
+        "to_date": to_date,
+        "operating": {
+            "netProfit": round(net_profit, 2),
+            "nonCashAdjustments": non_cash_adjustments,
+            "totalNonCashAdjustments": round(total_non_cash, 2),
+            "workingCapitalAdjustments": working_capital_items,
+            "totalWorkingCapitalAdjustments": round(total_working_capital, 2),
+            "total": round(total_operating, 2)
+        },
+        "investing": {
+            "items": investing_items,
+            "total": round(total_investing, 2)
+        },
+        "financing": {
+            "items": financing_items,
+            "total": round(total_financing, 2)
+        },
+        "summary": {
+            "netIncreaseInCash": round(net_cash_flow, 2),
+            "beginningCash": round(beginning_cash, 2),
+            "endingCash": round(ending_cash, 2),
+            "actualCashChange": round(actual_cash_change, 2),
+            "reconciled": abs(net_cash_flow - actual_cash_change) < 0.01,
+        },
+        "cashAccounts": cash_accounts_breakdown
+    }
+
+
 @app.get("/api/reports/general-ledger")
+
 def general_ledger(
     account: Optional[str] = None,
     from_date: Optional[str] = None,
@@ -996,22 +1266,31 @@ async def reset_to_draft(schema_name: str, name: str):
     if not doc:
         raise HTTPException(404, f"Document '{name}' not found")
 
-    if doc.get("submitted"):
-        await model.after_cancel(doc)
+    with db.transaction():
+        if doc.get("submitted"):
+            try:
+                await model.after_cancel(doc)
+            except Exception:
+                pass
 
-    doc._data["submitted"] = False
-    doc._data["cancelled"] = False
-    db.update_doc(doc)
+        doc._data["_is_lifecycle_transition"] = True
+        doc._data["submitted"] = 0
+        doc._data["cancelled"] = 0
+        doc._data["status"] = "Draft"
+        if schema_name in ["SalesInvoice", "PurchaseInvoice"]:
+            doc._data["outstandingAmount"] = doc.get("grandTotal", 0)
+        db.update_doc(doc)
+        doc._data.pop("_is_lifecycle_transition", None)
 
-    conn = db.get_connection()
-    conn.execute(
-        "DELETE FROM AccountingLedgerEntry WHERE reference_type = ? AND reference_name = ?",
-        (schema_name, name)
-    )
-    conn.commit()
+        conn = db.get_connection()
+        conn.execute(
+            "DELETE FROM AccountingLedgerEntry WHERE reference_type = ? AND reference_name = ?",
+            (schema_name, name)
+        )
+        conn.commit()
 
-    db.add_audit_log(schema_name, name, "Reset to Draft", "Reverted ledger postings and unlocked entry for editing")
-    return doc.to_dict()
+        db.add_audit_log(schema_name, name, "Reset to Draft", "Reverted ledger postings and unlocked entry for editing")
+        return doc.to_dict()
 
 
 @app.get("/api/{schema_name}/{name}/audit-logs")

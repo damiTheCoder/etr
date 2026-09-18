@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Check, CheckCircle2 } from 'lucide-react'
 import { api } from '@/utils/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,39 +43,30 @@ export default function CloseChecklist() {
           <p className="text-sm text-gray-500 mt-1">Month-end close checklist for {checklist.period}</p>
         </div>
         {checklist.is_closed && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            <CheckCircle2 className="w-4 h-4" /> Period Closed ({checklist.period})
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-black border border-black">
+            Period Closed ({checklist.period})
           </span>
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pre-Close Checklist</CardTitle>
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle className="text-black">Pre-Close Checklist</CardTitle>
           <CardDescription>Complete all items before closing the period</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <div className="space-y-3">
             {checklist.checks?.map((check: any) => (
               <div
                 key={check.name}
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  check.passed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'
-                }`}
+                className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white"
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                      check.passed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'
-                    }`}
-                  >
-                    {check.passed && <Check className="w-3 h-3" />}
-                  </div>
-                  <span className={`text-sm font-medium ${check.passed ? 'text-green-900' : 'text-gray-700'}`}>
+                  <span className="text-sm font-medium text-black">
                     {check.name}
                   </span>
                 </div>
-                <Badge variant={check.passed ? 'default' : 'secondary'}>
+                <Badge variant={check.passed ? 'default' : 'secondary'} className="text-black bg-transparent border border-slate-300">
                   {check.passed ? 'Passed' : 'Pending'}
                 </Badge>
               </div>
@@ -85,22 +75,22 @@ export default function CloseChecklist() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Close Status</CardTitle>
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle className="text-black">Close Status</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
+        <CardContent className="px-0">
+          <div className="flex items-center justify-between p-4 bg-slate-200 rounded-lg">
             <div>
-              <p className="text-sm text-gray-500">Ready to close period ({checklist.period})</p>
-              <p className={`text-2xl font-bold ${checklist.is_closed ? 'text-emerald-600' : checklist.ready_to_close ? 'text-green-600' : 'text-gray-900'}`}>
-                {checklist.is_closed ? 'Closed ✓' : checklist.ready_to_close ? 'Yes' : 'No'}
+              <p className="text-sm text-black">Ready to close period ({checklist.period})</p>
+              <p className="text-2xl font-bold text-black">
+                {checklist.is_closed ? 'Closed' : checklist.ready_to_close ? 'Yes' : 'No'}
               </p>
             </div>
             <Button
               disabled={!checklist.ready_to_close || checklist.is_closed || closing}
               onClick={closePeriod}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
             >
               {checklist.is_closed ? 'Period Locked' : closing ? 'Closing...' : 'Close Period'}
             </Button>

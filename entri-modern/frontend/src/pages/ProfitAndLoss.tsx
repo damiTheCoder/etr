@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Download, Printer } from 'lucide-react'
 import { api } from '@/utils/api'
 import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 import { Button } from '@/components/ui/button'
@@ -7,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-
 import { useCompany } from '@/context/CompanyContext'
 
 export default function ProfitAndLoss() {
@@ -82,112 +80,133 @@ export default function ProfitAndLoss() {
             type="date"
             className="w-auto text-sm"
           />
-          <Button size="sm" onClick={loadReport}>
+          <Button
+            size="sm"
+            onClick={loadReport}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
             Apply
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="border-slate-300">
-            <Download className="w-4 h-4 mr-1.5" /> Export Excel / CSV
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export Excel / CSV
           </Button>
-          <Button size="sm" onClick={() => exportToPDF('Profit & Loss Statement')} className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Printer className="w-4 h-4 mr-1.5" /> Export PDF
+          <Button
+            size="sm"
+            onClick={() => exportToPDF('Profit & Loss Statement')}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-black font-semibold"
+          >
+            Export PDF
           </Button>
         </div>
       </div>
 
       {data ? (
-        <Card className="border-none bg-transparent shadow-none p-0">
-          <CardHeader className="border-none px-0 py-4 bg-transparent">
+        <Card className="border-0 bg-transparent shadow-none p-0">
+          <CardHeader className="border-0 px-0 py-4 bg-transparent">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <CardTitle className="text-xl font-bold text-slate-900">Statement of Profit & Loss (Income Statement)</CardTitle>
+                <CardTitle className="text-xl font-bold text-black">Statement of Profit & Loss (Income Statement)</CardTitle>
                 <CardDescription className="text-xs text-slate-500 font-medium mt-1">
                   Selected Financial Period • IFRS/GAAP Standard
                 </CardDescription>
               </div>
-              <Badge variant={data.netProfit >= 0 ? 'default' : 'destructive'} className="w-fit text-xs px-3 py-1 font-semibold">
+              <Badge variant="default" className="w-fit text-xs px-3 py-1 font-semibold text-black bg-transparent border-0">
                 Net Margin: {(data.netProfitMargin || 0).toFixed(1)}%
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="p-0 bg-transparent">
-            <div className="overflow-x-auto">
-              <Table className="w-full bg-transparent">
+            <div className="overflow-x-auto bg-transparent">
+              <Table className="w-full bg-transparent border-0">
                 <TableHeader>
-                  <TableRow className="border-b border-slate-300 bg-slate-100">
-                    <TableHead className="w-[50%] pl-6 text-slate-900 font-bold">Account Category & Name</TableHead>
-                    <TableHead className="text-right text-slate-900 font-bold">Margin %</TableHead>
-                    <TableHead className="text-right pr-6 text-slate-900 font-bold">Amount (USD)</TableHead>
+                  <TableRow className="border-0 bg-transparent">
+                    <TableHead className="w-[50%] pl-6 py-3 text-black font-bold">Account Category & Name</TableHead>
+                    <TableHead className="text-right py-3 text-black font-bold">Margin %</TableHead>
+                    <TableHead className="text-right pr-6 py-3 text-black font-bold">Amount (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="bg-transparent">
                   {/* INCOME SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-slate-200/70">
-                    <TableCell colSpan={3} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
+                  <TableRow className="font-bold text-black border-0 bg-transparent">
+                    <TableCell colSpan={3} className="pl-6 py-3 uppercase tracking-wider text-xs font-bold text-black">
                       1. REVENUE & INCOME
                     </TableCell>
                   </TableRow>
                   {data.income?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
-                      <TableCell className="text-right text-slate-600 text-sm font-mono">
+                    <TableRow key={a.name} className="border-0 bg-transparent">
+                      <TableCell className="pl-10 py-3 font-semibold text-black">{a.name}</TableCell>
+                      <TableCell className="text-right py-3 text-black text-sm font-mono">
                         {data.income.total ? ((a.balance / data.income.total) * 100).toFixed(1) + '%' : '0.0%'}
                       </TableCell>
-                      <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
+                      <TableCell className="text-right pr-6 py-3 font-mono text-black">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.income?.accounts || data.income.accounts.length === 0) && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-transparent">
+                    <TableRow className="border-0 bg-transparent">
+                      <TableCell colSpan={3} className="pl-10 py-3 text-slate-500 italic border-0 bg-transparent">
                         No income accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-transparent font-bold border-t border-b border-slate-200">
-                    <TableCell className="pl-6 font-bold text-slate-900">Total Income / Revenue</TableCell>
-                    <TableCell className="text-right text-slate-900 font-bold">100.0%</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900 text-base">
+                  {/* Total Income Row - HAS GREY BG */}
+                  <TableRow className="bg-slate-200 font-bold border-0 text-black">
+                    <TableCell className="pl-6 py-3 font-bold text-black">Total Income / Revenue</TableCell>
+                    <TableCell className="text-right py-3 text-black font-bold">100.0%</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-bold text-black text-base">
                       {formatCurrency(data.income?.total)}
                     </TableCell>
                   </TableRow>
 
                   {/* EXPENSES SECTION */}
-                  <TableRow className="font-bold text-slate-900 border-b border-slate-200 bg-slate-200/70">
-                    <TableCell colSpan={3} className="pl-6 py-2.5 uppercase tracking-wider text-xs font-bold text-slate-900">
+                  <TableRow className="font-bold text-black border-0 bg-transparent">
+                    <TableCell colSpan={3} className="pl-6 pt-5 pb-3 uppercase tracking-wider text-xs font-bold text-black">
                       2. OPERATING EXPENSES
                     </TableCell>
                   </TableRow>
                   {data.expenses?.accounts?.map((a: any) => (
-                    <TableRow key={a.name} className="hover:bg-slate-50 border-b border-slate-100 bg-transparent">
-                      <TableCell className="pl-10 font-semibold text-slate-800">{a.name}</TableCell>
-                      <TableCell className="text-right text-slate-600 text-sm font-mono">
+                    <TableRow key={a.name} className="border-0 bg-transparent">
+                      <TableCell className="pl-10 py-3 font-semibold text-black">{a.name}</TableCell>
+                      <TableCell className="text-right py-3 text-black text-sm font-mono">
                         {data.income?.total ? ((a.balance / data.income.total) * 100).toFixed(1) + '%' : '—'}
                       </TableCell>
-                      <TableCell className="text-right pr-6 font-mono text-slate-900">{formatCurrency(a.balance)}</TableCell>
+                      <TableCell className="text-right pr-6 py-3 font-mono text-black">{formatCurrency(a.balance)}</TableCell>
                     </TableRow>
                   ))}
                   {(!data.expenses?.accounts || data.expenses.accounts.length === 0) && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="pl-10 text-slate-500 py-3 italic border-b border-slate-100 bg-transparent">
+                    <TableRow className="border-0 bg-transparent">
+                      <TableCell colSpan={3} className="pl-10 py-3 text-slate-500 italic border-0 bg-transparent">
                         No expense accounts recorded
                       </TableCell>
                     </TableRow>
                   )}
-                  <TableRow className="bg-transparent font-bold border-t border-b border-slate-200">
-                    <TableCell className="pl-6 font-bold text-slate-900">Total Operating Expenses</TableCell>
-                    <TableCell className="text-right text-slate-900 font-bold">{expenseMargin.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right pr-6 font-mono font-bold text-slate-900">
+                  {/* Total Operating Expenses - HAS GREY BG */}
+                  <TableRow className="bg-slate-200 font-bold border-0 text-black">
+                    <TableCell className="pl-6 py-3 font-bold text-black">Total Operating Expenses</TableCell>
+                    <TableCell className="text-right py-3 text-black font-bold">{expenseMargin.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right pr-6 py-3 font-mono font-bold text-black">
                       {formatCurrency(data.expenses?.total)}
                     </TableCell>
                   </TableRow>
 
-                  {/* NET PROFIT GRAND TOTAL */}
-                  <TableRow className="bg-transparent font-bold border-t-2 border-b-2 border-slate-300 text-base">
-                    <TableCell className="pl-6 font-bold text-slate-900">NET PROFIT / (LOSS)</TableCell>
-                    <TableCell className={`text-right font-bold ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {(data.netProfitMargin || 0).toFixed(1)}%
-                    </TableCell>
-                    <TableCell className={`text-right pr-6 font-mono font-bold text-base ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {formatCurrency(data.netProfit)}
+                  {/* NET PROFIT GRAND TOTAL - WITH TOP MARGIN & GREY BG */}
+                  <TableRow className="border-0 bg-transparent">
+                    <TableCell colSpan={3} className="p-0">
+                      <div className="mt-4 bg-slate-200 flex items-center justify-between pl-6 pr-6 py-3 font-bold text-base text-black">
+                        <span className="font-bold text-black">NET PROFIT / (LOSS)</span>
+                        <div className="flex items-center gap-12">
+                          <span className="font-bold text-black">
+                            {(data.netProfitMargin || 0).toFixed(1)}%
+                          </span>
+                          <span className="font-mono font-bold text-base text-black">
+                            {formatCurrency(data.netProfit)}
+                          </span>
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 </TableBody>
