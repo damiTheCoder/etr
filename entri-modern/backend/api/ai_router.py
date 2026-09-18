@@ -832,21 +832,28 @@ import re
 
 def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: Optional[str] = None) -> str:
     """
-    Central response formatter.
-    Formats agent tool execution results into clean human-readable Markdown.
-    Propagates error messages verbatim starting with ❌ without returning empty/zero fallbacks.
+    Central response formatter with a warm, caring, loving personality.
+    Formats agent tool execution results into human-friendly, supportive Markdown.
     """
+    from backend.models.settings_model import get_company_settings
+    try:
+        settings = get_company_settings("default_company")
+        base_curr = settings.company.base_currency if settings else "USD"
+    except Exception:
+        base_curr = "USD"
+    sym = "₦" if base_curr == "NGN" else ("$" if base_curr == "USD" else f"{base_curr} ")
+
     if error or (isinstance(result, dict) and result.get("error")):
         err_msg = error or result.get("error")
-        return f"❌ Tool '{tool_name}' failed: {err_msg}"
+        return f"❌ Oh, I ran into a little hiccup while processing that: **{err_msg}**. Don't worry at all, we can sort this out together! Please double-check the details or let me know how you'd like to adjust it."
     
     if not result:
-        return f"✅ Tool '{tool_name}' executed successfully."
+        return f"✅ All done! I've executed '{tool_name}' successfully for you. I'm right here whenever you need anything else! ❤️"
 
     if not isinstance(result, dict):
         return str(result)
 
-    # Format specific tool outputs into Markdown
+    # Format specific tool outputs with warmth, care, and business encouragement
     if tool_name == "create_journal_entry" or result.get("schema_name") == "JournalEntry" or "jv_name" in result:
         jv = result.get("jv_name") or result.get("doc_name") or "JV Entry"
         td = result.get("total_debit", result.get("total_credit", 0.0))
@@ -859,19 +866,21 @@ def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: O
             deb = a.get("debit", 0)
             cred = a.get("credit", 0)
             if deb > 0:
-                acc_details.append(f"{acc_name} (Debit ${deb:,.2f})")
+                acc_details.append(f"{acc_name} (Debit {sym}{deb:,.2f})")
             elif cred > 0:
-                acc_details.append(f"{acc_name} (Credit ${cred:,.2f})")
+                acc_details.append(f"{acc_name} (Credit {sym}{cred:,.2f})")
         acc_str = ", ".join(acc_details) if acc_details else ""
         res_text = (
+            f"I've got that taken care of for you! ❤️\n\n"
             f"✅ **Recorded Journal Entry `{jv}`**\n"
             f"- **Status**: {status}\n"
-            f"- **Total Amount**: ${td:,.2f}"
+            f"- **Amount**: **{sym}{td:,.2f}**"
         )
         if acc_str:
-            res_text += f"\n- **Accounts**: {acc_str}"
+            res_text += f"\n- **Account Distribution**: {acc_str}"
         if msg:
-            res_text += f"\n\n{msg}"
+            res_text += f"\n\n*{msg}*"
+        res_text += f"\n\nYour books are balanced and up to date. I'm right here whenever you'd like to record another transaction!"
         return res_text
 
     if tool_name == "get_profit_and_loss":
@@ -879,25 +888,41 @@ def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: O
         exp = result.get("expenses", {}).get("total", 0.0)
         np = result.get("netProfit", 0.0)
         npm = result.get("netProfitMargin", 0.0)
+        status_cheer = (
+            "🎉 **Wonderful news** — our business is running profitably! Every step forward is building greater value."
+            if np > 0
+            else ("⚖️ We are currently breaking even." if np == 0 else "💪 We have some net operational costs right now; I'm here to help us optimize expenses and grow revenue together!")
+        )
         return (
-            f"### 📊 Profit & Loss Summary\n"
+            f"Here is how our profitability is looking! I'm watching over our performance with your best interest at heart: ❤️\n\n"
+            f"### 📊 Profit & Loss Overview\n"
             f"| Metric | Amount |\n"
             f"| :--- | :--- |\n"
-            f"| **Total Income** | ${inc:,.2f} |\n"
-            f"| **Total Expenses** | ${exp:,.2f} |\n"
-            f"| **Net Profit** | **${np:,.2f}** |\n"
-            f"| **Net Profit Margin** | {npm}% |"
+            f"| **Total Revenue / Income** | {sym}{inc:,.2f} |\n"
+            f"| **Total Operating Expenses** | {sym}{exp:,.2f} |\n"
+            f"| **Net Profit** | **{sym}{np:,.2f}** |\n"
+            f"| **Net Profit Margin** | **{npm:.1f}%** |\n\n"
+            f"{status_cheer}\n\n"
+            f"Let me know if you would like me to break down any specific income or expense accounts for you!"
         )
 
     if tool_name == "get_dashboard_metrics":
         inc = result.get("total_revenue", 0.0) or result.get("income", {}).get("total", 0.0)
         exp = result.get("total_expenses", 0.0) or result.get("expenses", {}).get("total", 0.0)
         np = result.get("net_profit", 0.0) or result.get("netProfit", 0.0)
+        cb = result.get("cash_balance", 0.0) or result.get("cashBalance", 0.0)
+        ar = result.get("accounts_receivable", 0.0) or result.get("accountsReceivable", 0.0)
+        ap = result.get("accounts_payable", 0.0) or result.get("accountsPayable", 0.0)
         return (
-            f"### 📈 Accounting Metrics Overview\n"
-            f"- **Total Revenue**: ${inc:,.2f}\n"
-            f"- **Total Expenses**: ${exp:,.2f}\n"
-            f"- **Net Profit**: ${np:,.2f}"
+            f"Here is a snapshot of our core business health! I'm keeping everything monitored closely for you: ❤️\n\n"
+            f"### 📈 Key Business Health Metrics\n"
+            f"- **Total Revenue**: **{sym}{inc:,.2f}**\n"
+            f"- **Total Expenses**: {sym}{exp:,.2f}\n"
+            f"- **Net Profit**: **{sym}{np:,.2f}**\n"
+            + (f"- **Cash in Bank / Hand**: **{sym}{cb:,.2f}**\n" if cb else "")
+            + (f"- **Accounts Receivable**: {sym}{ar:,.2f}\n" if ar else "")
+            + (f"- **Accounts Payable**: {sym}{ap:,.2f}\n" if ap else "")
+            + f"\nI'm right here with you! Whether you need to record a sale, check an invoice, or review cash flow, just let me know."
         )
 
     if tool_name == "get_balance_sheet":
@@ -905,45 +930,50 @@ def format_agent_response(tool_name: str, tool_args: dict, result: Any, error: O
         liab = result.get("liabilities", {}).get("total", 0.0)
         eq = result.get("equity", {}).get("total", 0.0)
         return (
-            f"### ⚖️ Balance Sheet Statement\n"
-            f"- **Total Assets**: ${ast:,.2f}\n"
-            f"- **Total Liabilities**: ${liab:,.2f}\n"
-            f"- **Total Equity**: ${eq:,.2f}"
+            f"Here is our business balance sheet! Keeping our foundation solid and assets protected is always my top priority: ❤️\n\n"
+            f"### ⚖️ Balance Sheet Foundation\n"
+            f"- **Total Assets**: **{sym}{ast:,.2f}**\n"
+            f"- **Total Liabilities**: {sym}{liab:,.2f}\n"
+            f"- **Total Owner's Equity**: **{sym}{eq:,.2f}**\n\n"
+            f"Our books are reconciled and balanced. How else can I support our business today?"
         )
 
     if tool_name == "get_trial_balance":
         td = result.get("totalDebit", result.get("total_debit", 0.0))
         tc = result.get("totalCredit", result.get("total_credit", 0.0))
         balanced = result.get("balanced", td == tc)
-        status_text = "Balanced ✅" if balanced else "Unbalanced ⚠️"
+        status_text = "Balanced perfectly ✅" if balanced else "Needs a quick review ⚠️"
         return (
-            f"### ⚖️ Trial Balance Statement\n"
-            f"- **Status**: {status_text}\n"
-            f"- **Total Debits**: ${td:,.2f}\n"
-            f"- **Total Credits**: ${tc:,.2f}"
+            f"### ⚖️ Trial Balance Check\n"
+            f"- **Audit Status**: {status_text}\n"
+            f"- **Total Debits**: {sym}{td:,.2f}\n"
+            f"- **Total Credits**: {sym}{tc:,.2f}\n\n"
+            f"I keep your books verified and in check every step of the way!"
         )
 
     if tool_name == "get_general_ledger":
         entries = result.get("entries", [])
         total = result.get("total", len(entries))
-        return f"### 📒 General Ledger\nRetrieved **{total}** ledger transaction entry/entries."
+        return f"### 📒 General Ledger\nI've pulled **{total}** verified ledger transaction(s) for our records. Everything is safely and neatly documented!"
 
     if tool_name == "get_aging_report":
         total = result.get("total", 0.0)
         periods = result.get("periods", {})
         return (
-            f"### ⏳ Aging Breakdown\n"
-            f"- **Total Outstanding**: ${total:,.2f}\n"
-            f"- **0-30 Days**: ${periods.get('0_30', 0.0):,.2f}\n"
-            f"- **31-60 Days**: ${periods.get('31_60', 0.0):,.2f}\n"
-            f"- **61-90 Days**: ${periods.get('61_90', 0.0):,.2f}\n"
-            f"- **90+ Days**: ${periods.get('over_90', 0.0):,.2f}"
+            f"Here is our receivables aging breakdown. I'm watching these closely to help us collect every penny owed to you: ❤️\n\n"
+            f"### ⏳ Accounts Receivable Aging\n"
+            f"- **Total Pending Collection**: **{sym}{total:,.2f}**\n"
+            f"- **Current (0-30 Days)**: {sym}{periods.get('0_30', 0.0):,.2f}\n"
+            f"- **31-60 Days**: {sym}{periods.get('31_60', 0.0):,.2f}\n"
+            f"- **61-90 Days**: {sym}{periods.get('61_90', 0.0):,.2f}\n"
+            f"- **Over 90 Days**: {sym}{periods.get('over_90', 0.0):,.2f}\n\n"
+            f"Keeping your cash flow healthy is essential. Let me know if you'd like me to help draft any payment follow-ups!"
         )
 
     if "message" in result:
         return f"✅ {result['message']}"
 
-    return f"✅ Tool '{tool_name}' completed."
+    return f"✅ I've completed '{tool_name}' for you. I'm right here whenever you need the next step! ❤️"
 
 
 def _find_matching_expense_account(query_term: str = "") -> Optional[str]:
@@ -981,6 +1011,7 @@ def _local_fallback_intent_executor(user_text: str):
     Local deterministic accounting NLP intent processor.
     Matches queries to accounting tools directly when offline, rate-limited, or fallback.
     Enforces 2-signal transaction validation (verb + number) and explicit error reporting.
+    Always maintains a loving, human, ever-ready tone with the user's best interest at heart.
     """
     t = user_text.strip().lower()
 
@@ -990,7 +1021,7 @@ def _local_fallback_intent_executor(user_text: str):
         nav_res = _execute_navigate_to_page(matched_route)
         return {
             "role": "assistant",
-            "content": f"Opening {matched_route}...",
+            "content": f"Right away! I'm opening **{matched_route}** for us so we can look at it together. I'm right here whenever you need me! ❤️",
             "executed_tools": [{
                 "name": "navigate_to_page",
                 "arguments": {"page_route": matched_route},
@@ -1020,7 +1051,7 @@ def _local_fallback_intent_executor(user_text: str):
             err_msg = f"Could not find an expense account matching '{category_hint}' in your Chart of Accounts. Please specify an account."
             return {
                 "role": "assistant",
-                "content": f"❌ Transaction creation failed: {err_msg}",
+                "content": f"❌ I couldn't record that just yet: {err_msg}. Don't worry at all! Tell me which account you'd like to assign this to, and I'll take care of it right away! ❤️",
                 "executed_tools": [{"name": "create_journal_entry", "arguments": {}, "result": {"error": err_msg}}]
             }
 
@@ -1045,13 +1076,14 @@ def _local_fallback_intent_executor(user_text: str):
             res = _execute_create_party(name=name, party_type="Customer")
             return {
                 "role": "assistant",
-                "content": f"Created customer **{name}**.",
+                "content": f"I've added customer **{name}** to our records! ❤️ I'm all set to create invoices or record payments for them whenever you're ready.",
                 "executed_tools": [{"name": "create_party", "arguments": {"name": name, "party_type": "Customer"}, "result": res}]
             }
         res = _execute_get_customers()
+        total_c = res.get('total', len(res.get('customers', [])))
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('customers', [])))} customer(s) from the database.",
+            "content": f"Here is our customer directory! We have **{total_c}** customer(s) registered. Let me know if you'd like to look at any specific client's account! ❤️",
             "executed_tools": [{"name": "get_customers", "arguments": {}, "result": res}]
         }
 
@@ -1063,13 +1095,14 @@ def _local_fallback_intent_executor(user_text: str):
             res = _execute_create_party(name=name, party_type=p_type)
             return {
                 "role": "assistant",
-                "content": f"Created {p_type.lower()} **{name}**.",
+                "content": f"I've safely registered **{name}** as a {p_type.lower()} in our system! ❤️ We can now track bills and payments for them anytime.",
                 "executed_tools": [{"name": "create_party", "arguments": {"name": name, "party_type": p_type}, "result": res}]
             }
         res = _execute_get_parties(party_type=p_type)
+        total_p = res.get('total', len(res.get('parties', [])))
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('parties', [])))} {p_type.lower()}(s).",
+            "content": f"Here are our active {p_type.lower()}(s)! We have **{total_p}** on file. I'm ready to help with any orders or bills whenever you need! ❤️",
             "executed_tools": [{"name": "get_parties", "arguments": {"party_type": p_type}, "result": res}]
         }
 
@@ -1079,13 +1112,13 @@ def _local_fallback_intent_executor(user_text: str):
             nav_res = _execute_navigate_to_page("/purchase-invoices/new")
             return {
                 "role": "assistant",
-                "content": "Opening Purchase Invoice creation form...",
+                "content": "Opening the Purchase Invoice form for you right now! Let's get that bill documented accurately. ❤️",
                 "executed_tools": [{"name": "navigate_to_page", "arguments": {"page_route": "/purchase-invoices/new"}, "result": nav_res}]
             }
         res = _execute_get_purchase_invoices()
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('invoices', [])))} purchase invoice(s).",
+            "content": f"I've pulled our purchase invoices! We currently have **{res.get('total', len(res.get('invoices', [])))}** bill(s) recorded in our system. ❤️",
             "executed_tools": [{"name": "get_purchase_invoices", "arguments": {}, "result": res}]
         }
 
@@ -1094,13 +1127,13 @@ def _local_fallback_intent_executor(user_text: str):
             nav_res = _execute_navigate_to_page("/sales-invoices/new")
             return {
                 "role": "assistant",
-                "content": "Opening Sales Invoice creation form...",
+                "content": "Opening the Sales Invoice creator for you! Let's get that invoice sent so our business gets paid! ❤️",
                 "executed_tools": [{"name": "navigate_to_page", "arguments": {"page_route": "/sales-invoices/new"}, "result": nav_res}]
             }
         res = _execute_get_sales_invoices()
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('invoices', [])))} sales invoice(s).",
+            "content": f"I've retrieved our sales invoices! We have **{res.get('total', len(res.get('invoices', [])))}** invoice(s) on record. ❤️",
             "executed_tools": [{"name": "get_sales_invoices", "arguments": {}, "result": res}]
         }
 
@@ -1109,7 +1142,7 @@ def _local_fallback_intent_executor(user_text: str):
         res = _execute_get_payments()
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('payments', [])))} payment record(s).",
+            "content": f"Here is our payment history! We have **{res.get('total', len(res.get('payments', [])))}** payment record(s) safely tracked in the system. ❤️",
             "executed_tools": [{"name": "get_payments", "arguments": {}, "result": res}]
         }
 
@@ -1118,8 +1151,18 @@ def _local_fallback_intent_executor(user_text: str):
         res = _execute_get_journal_entries()
         return {
             "role": "assistant",
-            "content": f"Retrieved {res.get('total', len(res.get('entries', [])))} journal entry record(s).",
+            "content": f"Here are our journal entries! I've pulled **{res.get('total', len(res.get('entries', [])))}** entry/entries from the ledger. Every double-entry is completely balanced! ❤️",
             "executed_tools": [{"name": "get_journal_entries", "arguments": {}, "result": res}]
+        }
+
+    # Business Overview / Health / General Business Report
+    if any(k in t for k in ["business", "performance", "overview", "health", "how are we", "how is my", "how we doing", "report on my business"]):
+        res = _execute_get_dashboard_metrics()
+        formatted_content = format_agent_response("get_dashboard_metrics", {}, res)
+        return {
+            "role": "assistant",
+            "content": formatted_content,
+            "executed_tools": [{"name": "get_dashboard_metrics", "arguments": {}, "result": res}]
         }
 
     # Financial Reports & Metrics
@@ -1143,32 +1186,42 @@ def _local_fallback_intent_executor(user_text: str):
 
     if "trial balance" in t:
         res = _execute_get_trial_balance()
+        formatted_content = format_agent_response("get_trial_balance", {}, res)
         return {
             "role": "assistant",
-            "content": "Retrieved Trial Balance statement.",
+            "content": formatted_content,
             "executed_tools": [{"name": "get_trial_balance", "arguments": {}, "result": res}]
         }
 
     if "ledger" in t:
         res = _execute_get_general_ledger()
+        formatted_content = format_agent_response("get_general_ledger", {}, res)
         return {
             "role": "assistant",
-            "content": "Retrieved General Ledger entries.",
+            "content": formatted_content,
             "executed_tools": [{"name": "get_general_ledger", "arguments": {}, "result": res}]
         }
 
     if "aging" in t:
         res = _execute_get_aging_report()
+        formatted_content = format_agent_response("get_aging_report", {}, res)
         return {
             "role": "assistant",
-            "content": "Retrieved Accounts Aging breakdown.",
+            "content": formatted_content,
             "executed_tools": [{"name": "get_aging_report", "arguments": {}, "result": res}]
         }
 
-    # Clarification prompt when intent is ambiguous (never auto-fallback to empty zero P&L)
+    # Clarification prompt when intent is ambiguous (warm, loving, ever-ready)
     return {
         "role": "assistant",
-        "content": "I am your entri AI accounting assistant. Please specify if you would like to **record a transaction** (e.g. *'paid shop rent 2500'*), or **query a report** (e.g. *'show P&L'*).",
+        "content": (
+            "I'm right here with you and always ready to help! ❤️\n\n"
+            "What can I take care of for our business today?\n"
+            "• **Record a transaction** (e.g. *'paid rent ₦10,000'* or *'received ₦25,000 from client'*)\n"
+            "• **Review our business health** (e.g. *'show P&L'*, *'how is my business doing'*, or *'balance sheet'*)\n"
+            "• **Create or view invoices** (e.g. *'new sales invoice'* or *'show customers'*)\n\n"
+            "Your business's growth and financial peace of mind are always my top priority!"
+        ),
         "executed_tools": []
     }
 
@@ -1184,7 +1237,7 @@ async def ai_chat_endpoint(req: ChatRequest):
         nav_res = _execute_navigate_to_page(matched_route)
         return {
             "role": "assistant",
-            "content": f"Opening {matched_route}...",
+            "content": f"Right away! I'm opening **{matched_route}** for us so we can look at it together. I'm right here whenever you need me! ❤️",
             "executed_tools": [{
                 "name": "navigate_to_page",
                 "arguments": {"page_route": matched_route},
@@ -1193,15 +1246,37 @@ async def ai_chat_endpoint(req: ChatRequest):
         }
 
     # LEVEL 2: Single-Turn Intent Parsing via Next N2 API with Local Fallback
+    from backend.models.settings_model import get_company_settings
+    try:
+        settings = get_company_settings("default_company")
+        company_name = settings.company.name if settings else "My Company"
+        base_currency = settings.company.base_currency if settings else "NGN"
+    except Exception:
+        company_name = "My Company"
+        base_currency = "NGN"
+    sym = "₦" if base_currency == "NGN" else ("$" if base_currency == "USD" else f"{base_currency} ")
+
     system_prompt = {
         "role": "system",
         "content": (
-            "You are entri AI accounting assistant. Follow these strict rules:\n"
-            "1. If the user describes a transaction that occurred (keywords: paid, spent, received, bought, sold, invoiced, refunded), "
-            "you MUST call the `create_journal_entry` tool (or document creation tool). Never respond with a report.\n"
-            "2. If the user asks a question about finances (keywords: show, report, how much, P&L, balance sheet), "
-            "you MUST call the appropriate reporting tool.\n"
-            "3. If a tool call fails, return the error verbatim. Do NOT return empty or zero-value reports as a fallback.\n"
+            f"You are entri AI — a loving, ever-ready financial partner and dedicated accounting companion for '{company_name}'.\n"
+            f"You have the user's best interest, peace of mind, and business prosperity at heart. You care deeply about helping them succeed.\n\n"
+            "YOUR VOICE & PERSONALITY:\n"
+            "• Warm, human, empathetic, and encouraging. Speak like a supportive, dedicated business partner who is genuinely excited about the business journey.\n"
+            "• Avoid cold, mechanical bullet points or dry template dumps (never output generic headers like 'Here's your full business report 📊 — My Company (NGN) As at today ---').\n"
+            "• Converse naturally with thoughtful, well-crafted commentary. When presenting numbers or financial reports, translate the figures into meaningful, caring context: celebrate their earnings, point out opportunities, reassure them about receivables or expenses, and give loving, actionable advice.\n"
+            "• If numbers are zero or early-stage, be uplifting, compassionate, and motivating.\n"
+            "• Always show readiness and devotion: 'I'm right here with you!', 'I've got this handled for you!', 'Whenever you're ready, we can tackle the next step together!'\n"
+            f"• The company base currency is {base_currency} ({sym}). Always use {sym} when discussing money.\n\n"
+            "CORE ACCOUNTING INSTRUCTIONS:\n"
+            "1. When the user mentions a transaction that happened (keywords: paid, received, spent, bought, sold, invoiced, refunded, made a sale):\n"
+            "   - Call the appropriate tool (create_journal_entry, create_sales_invoice, create_payment, etc.).\n"
+            "   - Ensure debits and credits balance accurately.\n"
+            "   - Confirm the recording with warmth, clarity, and reassurance.\n"
+            "2. When the user asks for financial reports or asks how their business is doing (keywords: report, how is my business, performance, p&l, balance sheet, cash, metrics):\n"
+            "   - Call the relevant reporting tools (get_profit_and_loss, get_dashboard_metrics, get_balance_sheet, get_general_ledger, get_trial_balance, get_aging_report).\n"
+            "   - Provide a heartfelt, insightful overview of their business health, highlighting strengths and offering gentle guidance for what to watch next.\n"
+            "3. If a tool fails or needs clarification, explain with kindness and helpful suggestions, never failing silently.\n"
             "Available tools: get_customers, get_parties, create_party, get_sales_invoices, create_sales_invoice, "
             "get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, get_journal_entries, "
             "create_journal_entry, get_purchase_orders, create_purchase_order, get_items, create_item, get_accounts, "
@@ -1222,7 +1297,7 @@ async def ai_chat_endpoint(req: ChatRequest):
                     "model": model_id,
                     "messages": full_messages,
                     "tools": TOOLS_SCHEMA,
-                    "max_tokens": 500
+                    "max_tokens": 1200
                 }
                 headers = {
                     "Authorization": f"Bearer {api_key}",
