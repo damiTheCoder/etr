@@ -15,6 +15,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({ open, onOpenChange }) => {
     if (!open) setIsExpanded(false)
   }, [open])
 
+  // Collapse expanded view when window resizes below desktop breakpoint
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640 && isExpanded) {
+        setIsExpanded(false)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isExpanded])
+
   const handleExpand = () => setIsExpanded((prev) => !prev)
   const handleClose = () => onOpenChange(false)
 

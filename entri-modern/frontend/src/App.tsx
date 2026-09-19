@@ -76,11 +76,30 @@ function AppLayout() {
       if (event.data?.type === 'NAVIGATE_PAGE' && event.data?.route) {
         navigate(event.data.route)
         setIsAIModalOpen(false)
+        setIsMobileAIOpen(false)
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [navigate])
+
+  // When the viewport crosses the 640px breakpoint while the chat is open,
+  // migrate state so the correct view shows and the Ask AI button stays visible.
+  React.useEffect(() => {
+    const handleResize = () => {
+      const isDesktop = window.innerWidth >= 640
+      if (isDesktop && isMobileAIOpen) {
+        setIsMobileAIOpen(false)
+        setIsAIModalOpen(true)
+      } else if (!isDesktop && isAIModalOpen) {
+        setIsAIModalOpen(false)
+        setIsMobileAIOpen(true)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isMobileAIOpen, isAIModalOpen])
+
 
   const isLinkActive = (target: string, exact = false) => {
     if (exact) return path === target
