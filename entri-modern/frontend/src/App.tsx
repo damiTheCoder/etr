@@ -65,6 +65,7 @@ function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
+  const [isMobileAIOpen, setIsMobileAIOpen] = useState(false)
   const { companyName } = useCompany()
   const location = useLocation()
   const navigate = useNavigate()
@@ -412,16 +413,30 @@ function AppLayout() {
           </div>
         </div>
 
-        {/* Shadcn Chat Modal */}
-        <ChatModal open={isAIModalOpen} onOpenChange={setIsAIModalOpen} />
+        {/* Mobile full-page AI chat overlay */}
+        {isMobileAIOpen && (
+          <div className="fixed inset-0 z-[60] bg-slate-100 flex flex-col sm:hidden animate-in slide-in-from-bottom duration-300">
+            <AIChat onCloseModal={() => setIsMobileAIOpen(false)} />
+          </div>
+        )}
 
+        {/* Desktop Chat Modal */}
+        <div className="hidden sm:block">
+          <ChatModal open={isAIModalOpen} onOpenChange={setIsAIModalOpen} />
+        </div>
 
         {/* Floating AI Agent Button with Soft Glow Effect */}
-        {!isAIModalOpen && (
+        {!isAIModalOpen && !isMobileAIOpen && (
           <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in fade-in zoom-in-95 duration-200">
             <button
               type="button"
-              onClick={() => setIsAIModalOpen(true)}
+              onClick={() => {
+                if (window.innerWidth < 640) {
+                  setIsMobileAIOpen(true)
+                } else {
+                  setIsAIModalOpen(true)
+                }
+              }}
               className="liquid-water-glow-btn flex items-center gap-2.5 px-6 py-3 rounded-full text-white font-semibold text-sm transition-all duration-300 cursor-pointer hover:scale-105 active:scale-95 border border-white/20 shadow-lg"
             >
               <img

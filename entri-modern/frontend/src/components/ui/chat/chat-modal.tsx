@@ -8,15 +8,42 @@ export interface ChatModalProps {
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({ open, onOpenChange }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false)
+
+  // Reset expanded when modal closes
+  React.useEffect(() => {
+    if (!open) setIsExpanded(false)
+  }, [open])
+
+  const handleExpand = () => setIsExpanded((prev) => !prev)
+  const handleClose = () => onOpenChange(false)
+
+  // Expanded full-screen overlay (desktop only, mobile never hits this — see App.tsx)
+  if (isExpanded && open) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in duration-200">
+        <AIChat
+          onCloseModal={handleClose}
+          onExpand={handleExpand}
+          isExpanded={isExpanded}
+        />
+      </div>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl w-[96vw] sm:w-[95vw] h-[95vh] h-[95dvh] sm:h-[86vh] max-h-[96vh] sm:max-h-[820px] p-0 gap-0 overflow-hidden bg-slate-100 text-slate-900 border border-slate-300/80 shadow-2xl rounded-2xl flex flex-col">
         <DialogHeader className="sr-only">
           <DialogTitle>entri AI Assistant</DialogTitle>
-          <DialogDescription>AI Financial Assistant & Accounting Automation Chat</DialogDescription>
+          <DialogDescription>AI Financial Assistant &amp; Accounting Automation Chat</DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 h-full overflow-hidden bg-slate-100">
-          <AIChat onCloseModal={() => onOpenChange(false)} />
+          <AIChat
+            onCloseModal={handleClose}
+            onExpand={handleExpand}
+            isExpanded={isExpanded}
+          />
         </div>
       </DialogContent>
     </Dialog>

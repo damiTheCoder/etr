@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo } from "react";
-import { SquarePen, X, Clock, Trash2, MessageSquare, Plus } from "lucide-react";
+import { SquarePen, X, Clock, Trash2, MessageSquare, Plus, Maximize2, Minimize2 } from "lucide-react";
 import { AnthropicLogo } from "@/components/ui/chat/anthropic-logo";
 
 export interface ChatSessionItem {
@@ -12,6 +12,8 @@ export interface ChatSessionItem {
 export interface ChatHeaderProps {
   onNewChat?: () => void;
   onCloseModal?: () => void;
+  onExpand?: () => void;
+  isExpanded?: boolean;
   sessions?: ChatSessionItem[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
@@ -21,6 +23,8 @@ export interface ChatHeaderProps {
 function PureChatHeader({
   onNewChat,
   onCloseModal,
+  onExpand,
+  isExpanded,
   sessions = [],
   activeSessionId,
   onSelectSession,
@@ -120,6 +124,18 @@ function PureChatHeader({
           )}
         </div>
 
+        {/* Expand / Shrink — desktop only, shown when modal is open */}
+        {onExpand && (
+          <button
+            onClick={onExpand}
+            type="button"
+            className="hidden sm:flex items-center justify-center size-7 rounded-lg text-slate-500 hover:bg-slate-200/80 hover:text-slate-900 transition-colors cursor-pointer"
+            title={isExpanded ? "Shrink chat" : "Expand to full screen"}
+          >
+            {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </button>
+        )}
+
         {onNewChat && (
           <button
             onClick={onNewChat}
@@ -147,3 +163,5 @@ function PureChatHeader({
 }
 
 export const ChatHeader = memo(PureChatHeader);
+
+

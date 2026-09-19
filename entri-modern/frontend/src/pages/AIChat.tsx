@@ -7,6 +7,8 @@ import { MultimodalInput } from "@/components/chat/multimodal-input"
 
 export interface AIChatProps {
   onCloseModal?: () => void
+  onExpand?: () => void
+  isExpanded?: boolean
 }
 
 export interface StoredSession {
@@ -19,7 +21,7 @@ export interface StoredSession {
 const STORAGE_KEY_SESSIONS = "entri_ai_sessions_v2"
 const STORAGE_KEY_ACTIVE = "entri_ai_active_session_v2"
 
-export default function AIChat({ onCloseModal }: AIChatProps) {
+export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatProps) {
   const navigate = useNavigate()
 
   // Load sessions from localStorage
@@ -261,6 +263,8 @@ export default function AIChat({ onCloseModal }: AIChatProps) {
       <ChatHeader
         onNewChat={handleNewChat}
         onCloseModal={onCloseModal}
+        onExpand={onExpand}
+        isExpanded={isExpanded}
         sessions={headerSessions}
         activeSessionId={activeSessionId}
         onSelectSession={handleSelectSession}
