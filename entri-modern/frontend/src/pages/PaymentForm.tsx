@@ -15,6 +15,7 @@ export default function PaymentForm() {
 
   const [parties, setParties] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
+  const [wasSubmitted, setWasSubmitted] = useState(false)
 
   const [party, setParty] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -33,12 +34,26 @@ export default function PaymentForm() {
         setParties(p as any[])
         const filteredAccounts = (a as any[]).filter(acc => ['Cash', 'Bank'].includes(acc.accountType) || acc.name === 'Cash' || acc.name === 'Bank')
         setAccounts(filteredAccounts.length > 0 ? filteredAccounts : (a as any[]))
+
+        if (isEdit && name) {
+          const doc = await api.get<any>('PaymentEntry', name)
+          setParty(doc.party || '')
+          setDate(doc.date || new Date().toISOString().split('T')[0])
+          setAmount(Number(doc.amount || 0))
+          setPaymentType(doc.paymentType || 'Receive')
+          setPaymentMethod(doc.paymentMethod || 'Cash')
+          setAccount(doc.account || 'Cash')
+          setReferenceNumber(doc.referenceNumber || '')
+          setClearanceDate(doc.clearanceDate || '')
+          setUserRemark(doc.userRemark || '')
+          setWasSubmitted(!!doc.submitted)
+        }
       } catch (e) {
         console.error(e)
       }
     }
     loadMasters()
-  }, [])
+  }, [isEdit, name])
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -55,8 +70,15 @@ export default function PaymentForm() {
         userRemark,
         numberSeries: 'PAY-',
       }
-      const res = await api.create('Payment', data)
-      await api.submit('Payment', res.name)
+      if (isEdit && name) {
+        await api.update('PaymentEntry', name, data)
+        if (!wasSubmitted) {
+          await api.submit('PaymentEntry', name)
+        }
+      } else {
+        const res = await api.create('PaymentEntry', data)
+        await api.submit('PaymentEntry', res.name)
+      }
       navigate('/payments')
     } catch (err: any) {
       alert(err.message)
@@ -160,7 +182,7 @@ export default function PaymentForm() {
           <Button type="button" variant="secondary" asChild>
             <Link to="/payments">Cancel</Link>
           </Button>
-          <Button type="submit">Save & Submit</Button>
+          <Button type="submit">{isEdit ? (wasSubmitted ? 'Update' : 'Update & Submit') : 'Save & Submit'}</Button>
         </div>
       </form>
     </div>

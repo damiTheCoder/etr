@@ -12,10 +12,6 @@ export default function SalesInvoices() {
   const { formatCurrency } = useCompany()
   const [invoices, setInvoices] = useState<any[]>([])
 
-  function formatNumber(v: number) {
-    return Number(v || 0).toFixed(2)
-  }
-
   async function loadInvoices() {
     try {
       const data = await api.list('SalesInvoice')

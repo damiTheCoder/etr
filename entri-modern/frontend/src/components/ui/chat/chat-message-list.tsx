@@ -6,12 +6,14 @@ import { MessageScroller } from "./message-scroller"
 import { Marker } from "./marker"
 
 import { NeatResponseText } from "./neat-response-text"
+import { DocumentPreview } from "@/components/chat/document-preview"
 
 export interface Message {
   id: string
   role: "user" | "assistant"
   content: string
   executedTools?: any[]
+  documentPreview?: string
   createdAt: string
 }
 
@@ -53,6 +55,27 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
                       ))}
                     </div>
                   )}
+
+                  {m.documentPreview && (() => {
+                    try {
+                      const previewData = JSON.parse(m.documentPreview)
+                      if (previewData._type === "document_preview") {
+                        return (
+                          <div className="mt-3 w-full">
+                            <DocumentPreview
+                              transactions={previewData.transactions}
+                              docType={previewData.docType}
+                              fileId={previewData.fileId}
+                              sessionToken={previewData.sessionToken}
+                              totalMismatch={previewData.totalMismatch}
+                              flaggedCount={previewData.flaggedCount}
+                            />
+                          </div>
+                        )
+                      }
+                    } catch { /* invalid JSON — skip */ }
+                    return null
+                  })()}
                 </ChatBubbleMessage>
 
                 <div className="flex items-center gap-2 px-1">

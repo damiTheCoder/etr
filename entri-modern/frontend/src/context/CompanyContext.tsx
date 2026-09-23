@@ -6,7 +6,7 @@ export interface CompanyContextValue {
   currencySymbol: string
   fiscalYearStart: number
   fiscalYearEnd: number
-  formatCurrency: (amount: number | string) => string
+  formatCurrency: (amount: number | string | null | undefined) => string
   refetchSettings: () => Promise<void>
   isLoading: boolean
 }
@@ -27,9 +27,9 @@ const CompanyContext = createContext<CompanyContextValue>({
   currencySymbol: '₦',
   fiscalYearStart: 1,
   fiscalYearEnd: 12,
-  formatCurrency: (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    if (isNaN(num)) return '₦0.00'
+  formatCurrency: (amount: number | string | null | undefined) => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount ?? 0)
+    if (!isFinite(num) || isNaN(num)) return '₦0.00'
     return `₦${num.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   },
   refetchSettings: async () => {},
@@ -69,9 +69,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   const currencySymbol = CURRENCY_SYMBOLS[state.baseCurrency] ?? state.baseCurrency
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    if (isNaN(num)) return `${currencySymbol}0.00`
+  const formatCurrency = (amount: number | string | null | undefined) => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount ?? 0)
+    if (!isFinite(num) || isNaN(num)) return `${currencySymbol}0.00`
     return `${currencySymbol}${num.toLocaleString('en-NG', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,

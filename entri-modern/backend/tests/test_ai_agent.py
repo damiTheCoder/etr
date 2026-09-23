@@ -95,7 +95,7 @@ class TestAIAgent(unittest.TestCase):
         res = _local_fallback_intent_executor("paid shop rent 2500")
 
         self.assertIn("❌", res["content"])
-        self.assertIn("Transaction creation failed", res["content"])
+        self.assertIn("Could not find an expense account", res["content"])
 
     def test_two_signal_rule_prevents_false_positives(self):
         """
@@ -110,7 +110,7 @@ class TestAIAgent(unittest.TestCase):
         self.assertEqual(len(entries), 0)
 
         # Must route to P&L report
-        self.assertIn("Profit & Loss Summary", res["content"])
+        self.assertIn("Profit & Loss Overview", res["content"])
 
     def test_two_signal_rule_query_without_amount(self):
         """
@@ -121,7 +121,7 @@ class TestAIAgent(unittest.TestCase):
 
         entries = db.get_all_docs("JournalEntry")
         self.assertEqual(len(entries), 0)
-        self.assertIn("I am your entri AI accounting assistant", res["content"])
+        self.assertIn("always ready to help", res["content"])
 
     def test_execute_get_accounts_tree_import(self):
         """

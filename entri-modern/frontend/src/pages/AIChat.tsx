@@ -4,6 +4,7 @@ import { Message } from "@/components/ui/chat"
 import { ChatHeader, ChatSessionItem } from "@/components/chat/chat-header"
 import { Messages } from "@/components/chat/messages"
 import { MultimodalInput } from "@/components/chat/multimodal-input"
+import { DocumentPreview } from "@/components/chat/document-preview"
 
 export interface AIChatProps {
   onCloseModal?: () => void
@@ -70,6 +71,7 @@ export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatPro
 
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Save sessions to localStorage
@@ -154,19 +156,22 @@ export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatPro
 
   const handleSend = async (promptText?: string) => {
     const textToSend = promptText || input
-    if (!textToSend.trim() || loading) return
+    if (!textToSend.trim() && !pendingFile) return
+    if (loading) return
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: textToSend,
+      content: pendingFile
+        ? `📎 ${pendingFile.name}${textToSend.trim() ? `\n${textToSend}` : ""}`
+        : textToSend,
       createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     }
 
     const currentMessages = activeSession ? activeSession.messages : []
     const newMessages = [...currentMessages, userMsg]
 
-    updateActiveSessionMessages(() => newMessages, textToSend)
+    updateActiveSessionMessages(() => newMessages, textToSend || pendingFile?.name || "Document Upload")
 
     if (!promptText) {
       setInput("")
@@ -177,6 +182,71 @@ export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatPro
     abortControllerRef.current = controller
 
     try {
+      // --- Document upload flow ---
+      if (pendingFile) {
+        const fileToUpload = pendingFile
+        setPendingFile(null)
+
+        const formData = new FormData()
+        formData.append("file", fileToUpload)
+
+        const uploadRes = await fetch("/api/ai/upload-document", {
+          method: "POST",
+          signal: controller.signal,
+          body: formData,
+        })
+
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json().catch(() => ({ detail: "Upload failed" }))
+          throw new Error(errData.detail || `Upload failed (${uploadRes.status})`)
+        }
+
+        const uploadData = await uploadRes.json()
+
+        if (!uploadData.success) {
+          throw new Error(uploadData.error || "Document processing failed")
+        }
+
+        // Build a rich message with DocumentPreview content info
+        const txnCount = uploadData.transaction_count || 0
+        const flaggedCount = uploadData.flagged_count || 0
+        const docType = uploadData.doc_type || "document"
+
+        let summary = `I've finished reading your ${docType === "bank_statement" ? "bank statement" : docType}! 📄\n\n`
+        summary += `Found **${txnCount} transactions**`
+        if (flaggedCount > 0) {
+          summary += ` (${flaggedCount} need your review)`
+        }
+        summary += ".\n\n"
+        if (uploadData.total_mismatch) {
+          summary += "⚠️ **Warning**: The document total doesn't match the sum of extracted transactions. Please review carefully before posting.\n\n"
+        }
+        summary += `Use the table below to review and post the transactions to your ledger.`
+
+        // Store document data as a JSON string in a special format the Messages component can detect
+        const docPreviewData = JSON.stringify({
+          _type: "document_preview",
+          transactions: uploadData.transactions,
+          docType: uploadData.doc_type,
+          fileId: uploadData.file_id,
+          sessionToken: uploadData.session_token,
+          totalMismatch: uploadData.total_mismatch,
+          flaggedCount: uploadData.flagged_count,
+        })
+
+        const assistantMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: summary,
+          createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          documentPreview: docPreviewData,
+        }
+
+        updateActiveSessionMessages((prev) => [...prev, assistantMsg])
+        return
+      }
+
+      // --- Normal chat flow ---
       const apiMessages = newMessages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -288,6 +358,8 @@ export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatPro
           onStop={handleStop}
           isLoading={loading}
           messagesCount={messages.length}
+          pendingFile={pendingFile}
+          onFileSelect={setPendingFile}
         />
       </div>
     </div>

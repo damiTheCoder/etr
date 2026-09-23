@@ -287,6 +287,7 @@ async def test_override_accounts():
 
 async def test_missing_setting_raises_error():
     """Test missing account setting raises SettingsIncompleteError."""
+    setup_test_db()
     # Remove sales setting for tenant_b
     db.set_single_value("default_sales_income_account_id_tenant_b", "")
     db.set_single_value("default_sales_account", "")

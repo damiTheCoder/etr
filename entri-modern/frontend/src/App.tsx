@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { CompanyProvider, useCompany } from './context/CompanyContext'
 import {
   LayoutDashboard,
@@ -27,10 +27,10 @@ import {
   Sparkles,
   Activity,
 } from 'lucide-react'
-
+import Landing from './pages/Landing'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import AIChat from './pages/AIChat'
-import { ChatModal } from './components/ui/chat'
 import SalesInvoices from './pages/SalesInvoices'
 import SalesInvoiceForm from './pages/SalesInvoiceForm'
 import PurchaseInvoices from './pages/PurchaseInvoices'
@@ -60,6 +60,7 @@ import Items from './pages/Items'
 import ItemForm from './pages/ItemForm'
 import SettingsPage from './pages/Settings'
 import GlobalSearch from './components/GlobalSearch'
+import { ChatModal } from './components/ui/chat/chat-modal'
 
 function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -129,10 +130,15 @@ function AppLayout() {
         }`}
       >
         <div className={`flex h-14 shrink-0 items-center justify-between px-4 ${sidebarCollapsed ? 'md:justify-center md:px-0' : ''}`}>
-          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2.5">
-            <img src="/logo.png" alt="entri logo" className="w-8 h-8 rounded-full shadow-sm object-cover" />
-            <span className={`tracking-tight text-blue-600 ${sidebarCollapsed ? 'md:hidden' : 'inline'}`}>entri</span>
-          </h1>
+              <Link
+                to="/landing"
+                title="Go to landing page"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-2.5"
+              >
+                <img src="/logo.png" alt="entri logo" className="w-8 h-8 rounded-full shadow-sm object-cover" />
+                <span className={`tracking-tight text-blue-600 ${sidebarCollapsed ? 'md:hidden' : 'inline'}`}>entri</span>
+              </Link>
           <button
             type="button"
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-700 md:hidden"
@@ -390,45 +396,8 @@ function AppLayout() {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="p-4 md:p-8 max-w-7xl mx-auto">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/ai" element={<AIChat />} />
-              <Route path="/sales-invoices" element={<SalesInvoices />} />
-              <Route path="/sales-invoices/new" element={<SalesInvoiceForm />} />
-              <Route path="/sales-invoices/:name" element={<SalesInvoiceForm />} />
-              <Route path="/purchase-invoices" element={<PurchaseInvoices />} />
-              <Route path="/purchase-invoices/new" element={<PurchaseInvoiceForm />} />
-              <Route path="/purchase-invoices/:name" element={<PurchaseInvoiceForm />} />
-              <Route path="/payments" element={<Payments />} />
-              <Route path="/payments/new" element={<PaymentForm />} />
-              <Route path="/journal-entries" element={<JournalEntries />} />
-              <Route path="/journal-entries/new" element={<JournalEntryForm />} />
-              <Route path="/journal-entries/:name" element={<JournalEntryForm />} />
-              <Route path="/purchase-orders" element={<PurchaseOrders />} />
-              <Route path="/purchase-orders/new" element={<PurchaseOrderForm />} />
-              <Route path="/reconciliations" element={<Reconciliations />} />
-              <Route path="/reconciliations/new" element={<ReconciliationForm />} />
-              <Route path="/reports/profit-and-loss" element={<ProfitAndLoss />} />
-              <Route path="/reports/balance-sheet" element={<BalanceSheet />} />
-              <Route path="/reports/cashflow" element={<CashFlow />} />
-              <Route path="/reports/cash-flow" element={<CashFlow />} />
-              <Route path="/reports/general-ledger" element={<GeneralLedger />} />
-              <Route path="/reports/trial-balance" element={<TrialBalance />} />
-              <Route path="/reports/ar-aging" element={<ARAging />} />
-              <Route path="/reports/ap-aging" element={<APAging />} />
-              <Route path="/reports/tax-summary" element={<TaxSummary />} />
-              <Route path="/reports/close-checklist" element={<CloseChecklist />} />
-              <Route path="/approvals" element={<Approvals />} />
-              <Route path="/accounts" element={<Accounts />} />
-              <Route path="/parties" element={<Parties />} />
-              <Route path="/parties/new" element={<PartyForm />} />
-              <Route path="/parties/:name" element={<PartyForm />} />
-              <Route path="/items" element={<Items />} />
-              <Route path="/items/new" element={<ItemForm />} />
-              <Route path="/items/:name" element={<ItemForm />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
+          <div className="w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+            <Outlet />
           </div>
         </div>
 
@@ -478,7 +447,52 @@ export default function App() {
   return (
     <CompanyProvider>
       <BrowserRouter>
-        <AppLayout />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/landing" element={<Landing />} />
+          <Route element={<AppLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="ai" element={<AIChat />} />
+            <Route path="sales-invoices" element={<SalesInvoices />} />
+            <Route path="sales-invoices/new" element={<SalesInvoiceForm />} />
+            <Route path="sales-invoices/:name" element={<SalesInvoiceForm />} />
+            <Route path="purchase-invoices" element={<PurchaseInvoices />} />
+            <Route path="purchase-invoices/new" element={<PurchaseInvoiceForm />} />
+            <Route path="purchase-invoices/:name" element={<PurchaseInvoiceForm />} />
+            <Route path="payments" element={<Payments />} />
+            <Route path="payments/new" element={<PaymentForm />} />
+            <Route path="payments/:name" element={<PaymentForm />} />
+            <Route path="journal-entries" element={<JournalEntries />} />
+            <Route path="journal-entries/new" element={<JournalEntryForm />} />
+            <Route path="journal-entries/:name" element={<JournalEntryForm />} />
+            <Route path="purchase-orders" element={<PurchaseOrders />} />
+            <Route path="purchase-orders/new" element={<PurchaseOrderForm />} />
+            <Route path="purchase-orders/:name" element={<PurchaseOrderForm />} />
+            <Route path="reconciliations" element={<Reconciliations />} />
+            <Route path="reconciliations/new" element={<ReconciliationForm />} />
+            <Route path="reconciliations/:name" element={<ReconciliationForm />} />
+            <Route path="reports/profit-and-loss" element={<ProfitAndLoss />} />
+            <Route path="reports/balance-sheet" element={<BalanceSheet />} />
+            <Route path="reports/cashflow" element={<CashFlow />} />
+            <Route path="reports/cash-flow" element={<CashFlow />} />
+            <Route path="reports/general-ledger" element={<GeneralLedger />} />
+            <Route path="reports/trial-balance" element={<TrialBalance />} />
+            <Route path="reports/ar-aging" element={<ARAging />} />
+            <Route path="reports/ap-aging" element={<APAging />} />
+            <Route path="reports/tax-summary" element={<TaxSummary />} />
+            <Route path="reports/close-checklist" element={<CloseChecklist />} />
+            <Route path="approvals" element={<Approvals />} />
+            <Route path="accounts" element={<Accounts />} />
+            <Route path="parties" element={<Parties />} />
+            <Route path="parties/new" element={<PartyForm />} />
+            <Route path="parties/:name" element={<PartyForm />} />
+            <Route path="items" element={<Items />} />
+            <Route path="items/new" element={<ItemForm />} />
+            <Route path="items/:name" element={<ItemForm />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
       </BrowserRouter>
     </CompanyProvider>
   )

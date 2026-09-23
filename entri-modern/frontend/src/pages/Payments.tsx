@@ -25,7 +25,7 @@ export default function Payments() {
 
   async function loadPayments() {
     try {
-      const data = await api.list('Payment')
+      const data = await api.list('PaymentEntry')
       setPayments(data || [])
     } catch (e) {
       console.error(e)
@@ -48,7 +48,7 @@ export default function Payments() {
 
   async function submitPayment(name: string) {
     try {
-      await api.submit('Payment', name)
+      await api.submit('PaymentEntry', name)
       loadPayments()
     } catch (e: any) {
       alert(e.message)
@@ -58,7 +58,7 @@ export default function Payments() {
   async function cancelPayment(name: string) {
     if (!confirm(`Cancel payment ${name}?`)) return
     try {
-      await api.cancel('Payment', name)
+      await api.cancel('PaymentEntry', name)
       loadPayments()
     } catch (e: any) {
       alert(e.message)

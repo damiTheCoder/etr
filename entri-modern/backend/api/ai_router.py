@@ -7,15 +7,25 @@ import os
 import json
 import asyncio
 import time
+import uuid
+import hashlib
+import tempfile
 import httpx
 import re
 from datetime import date as date_cls
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from backend.core import database as db
 from backend.core.schema_engine import Doc
+from backend.api.ai_security import (
+    generate_idempotency_key,
+    check_idempotency_key,
+    sanitize_text,
+    has_injection_patterns,
+    resolve_party,
+)
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -608,7 +618,24 @@ def _execute_get_journal_entries(limit: int = 10):
     res = [e.to_dict() for e in entries]
     return {"journal_entries": res, "total": len(res)}
 
-def _execute_create_journal_entry(entries: list, remark: str = ""):
+def _execute_create_journal_entry(entries: list, remark: str = "", idempotency_key: str = "", date: str = ""):
+    # Gap 1: Idempotency — return existing entry if duplicate key detected
+    if idempotency_key:
+        existing = check_idempotency_key(idempotency_key)
+        if existing:
+            return {
+                "success": True,
+                "schema_name": "JournalEntry",
+                "doc_name": existing.get("name", ""),
+                "jv_name": existing.get("name", ""),
+                "total_debit": existing.get("totalDebit", 0),
+                "total_credit": existing.get("totalCredit", 0),
+                "status": "Submitted",
+                "accounts": existing.get("accounts", []),
+                "idempotent": True,
+                "message": f"Journal Entry {existing.get('name', '')} already exists (idempotent)."
+            }
+
     jv_name = _generate_doc_name("JV-", "JournalEntry")
 
     formatted_accounts = []
@@ -625,15 +652,18 @@ def _execute_create_journal_entry(entries: list, remark: str = ""):
             "credit": c
         })
 
+    # Gap 3: Sanitize remark to prevent prompt injection in stored ledger text
+    safe_remark = sanitize_text(remark)
     doc = Doc("JournalEntry", {
         "name": jv_name,
-        "date": date_cls.today().isoformat(),
-        "userRemark": remark,
+        "date": date or date_cls.today().isoformat(),
+        "userRemark": safe_remark,
         "totalDebit": total_debit,
         "totalCredit": total_credit,
         "submitted": 1,
         "status": "Submitted",
-        "accounts": formatted_accounts
+        "accounts": formatted_accounts,
+        "idempotency_key": idempotency_key,
     })
     doc._not_inserted = True
     db.insert_doc(doc)
@@ -1006,7 +1036,7 @@ def _find_matching_expense_account(query_term: str = "") -> Optional[str]:
     return first_exp.get("name") or first_exp.get("accountName")
 
 
-def _local_fallback_intent_executor(user_text: str):
+def _local_fallback_intent_executor(user_text: str, user_id: str = "default", require_confirmation: bool = False):
     """
     Local deterministic accounting NLP intent processor.
     Matches queries to accounting tools directly when offline, rate-limited, or fallback.
@@ -1014,6 +1044,15 @@ def _local_fallback_intent_executor(user_text: str):
     Always maintains a loving, human, ever-ready tone with the user's best interest at heart.
     """
     t = user_text.strip().lower()
+
+    # Resolve currency symbol for display
+    try:
+        from backend.models.settings_model import get_company_settings
+        company_cfg = get_company_settings("default_company")
+        base_curr = company_cfg.company.base_currency if company_cfg else "NGN"
+    except Exception:
+        base_curr = "NGN"
+    sym = "₦" if base_curr == "NGN" else ("$" if base_curr == "USD" else f"{base_curr} ")
 
     # Check page navigation fast matcher
     matched_route = _local_fast_route_matcher(user_text)
@@ -1040,11 +1079,63 @@ def _local_fallback_intent_executor(user_text: str):
     # Requires BOTH a transaction verb AND a numeric amount to create a journal entry.
     if matched_verb and num_match:
         amount = float(num_match.group(1))
+
+        # Gap 3: Check for prompt injection in user text
+        has_injection, injection_matches = has_injection_patterns(user_text)
+        if has_injection:
+            return {
+                "role": "assistant",
+                "content": (
+                    "⚠️ I detected potentially unsafe content in your message "
+                    f"({len(injection_matches)} pattern(s) matched). "
+                    "For your security, I've filtered it out. Could you please "
+                    "rephrase your request? ❤️"
+                ),
+                "executed_tools": [],
+                "injection_blocked": True,
+            }
+
         # Extract category text by stripping verb and number
         clean_desc = re.sub(r'\b\d+(?:\.\d+)?\b', '', t)
         for verb in transaction_verbs:
             clean_desc = clean_desc.replace(verb, '')
         category_hint = clean_desc.strip() or "General Expense"
+
+        # Gap 4: Entity resolution — check if text references a party
+        words_between = clean_desc.strip()
+        if words_between and matched_verb in ("paid", "received", "bought"):
+            party_result = resolve_party(words_between)
+            if party_result["status"] == "ambiguous":
+                candidates = party_result.get("candidates", [])
+                cand_names = [c.get("name", "") for c in candidates]
+                cand_list = ", ".join(cand_names)
+                return {
+                    "role": "assistant",
+                    "content": (
+                        f"I found {len(candidates)} parties matching '{words_between}'. "
+                        f"Which one did you mean? {cand_list}"
+                    ),
+                    "type": "disambiguation",
+                    "candidates": cand_names,
+                    "executed_tools": [],
+                }
+            if party_result["status"] == "not_found" and party_result.get("suggestions"):
+                expense_check = _find_matching_expense_account(category_hint)
+                if not expense_check:
+                    suggestions = party_result.get("suggestions", [])
+                    suggestion_names = [s.get("name", "") for s in suggestions[:3]]
+                    return {
+                        "role": "assistant",
+                        "content": (
+                            f"No party found matching '{words_between}'. "
+                            f"Would you like me to create a new party named '{words_between}'? "
+                            f"Existing parties: {', '.join(suggestion_names) if suggestion_names else 'none yet'}"
+                        ),
+                        "type": "entity_not_found",
+                        "query": words_between,
+                        "suggestions": suggestion_names,
+                        "executed_tools": [],
+                    }
 
         expense_account = _find_matching_expense_account(category_hint)
         if not expense_account:
@@ -1056,11 +1147,38 @@ def _local_fallback_intent_executor(user_text: str):
             }
 
         # Create Journal Entry: Debit Expense Account, Credit Bank
+        # Gap 1: Generate idempotency key to prevent duplicate writes
+        idem_key = generate_idempotency_key(user_text, user_id)
         entries = [
             {"account": expense_account, "debit": amount, "credit": 0.0},
             {"account": "Bank", "debit": 0.0, "credit": amount}
         ]
-        res = _execute_create_journal_entry(entries=entries, remark=f"{matched_verb.capitalize()} {category_hint.title()}")
+        remark_text = f"{matched_verb.capitalize()} {category_hint.title()}"
+
+        # Gap 2: If confirmation is required, return proposed_action without executing
+        if require_confirmation:
+            description = (
+                f"Record: Debit {expense_account} {sym}{amount:,.2f}, "
+                f"Credit Bank {sym}{amount:,.2f}, dated {date_cls.today().isoformat()}"
+            )
+            proposal = _store_pending_action(
+                tool_name="create_journal_entry",
+                args={"entries": entries, "remark": remark_text},
+                idempotency_key=idem_key,
+                description=description,
+            )
+            return {
+                "role": "assistant",
+                "content": (
+                    f"I'd like to record a journal entry for you. Here's what I propose:\n\n"
+                    f"{description}\n\n"
+                    "Please confirm to proceed, or cancel if this doesn't look right. ❤️"
+                ),
+                **proposal,
+                "executed_tools": [],
+            }
+
+        res = _execute_create_journal_entry(entries=entries, remark=remark_text, idempotency_key=idem_key)
         formatted_content = format_agent_response("create_journal_entry", {"entries": entries}, res)
         return {
             "role": "assistant",
@@ -1226,6 +1344,135 @@ def _local_fallback_intent_executor(user_text: str):
     }
 
 
+# --- Gap 2: Pending Action Store for Human Confirmation ---
+_pending_actions: Dict[str, Dict[str, Any]] = {}
+_ACTION_TTL_SECONDS = 300  # 5 minutes
+
+WRITE_TOOLS = {
+    "create_journal_entry", "create_sales_invoice", "create_purchase_invoice",
+    "create_payment", "create_purchase_order", "create_item", "create_party",
+}
+READ_ONLY_TOOLS = {
+    "get_customers", "get_parties", "get_sales_invoices", "get_purchase_invoices",
+    "get_payments", "get_journal_entries", "get_purchase_orders", "get_items",
+    "get_accounts", "get_dashboard_metrics", "get_profit_and_loss",
+    "get_balance_sheet", "get_general_ledger", "get_trial_balance",
+    "get_aging_report", "navigate_to_page",
+}
+
+
+def _store_pending_action(
+    tool_name: str, args: dict, idempotency_key: str, description: str,
+) -> Dict[str, Any]:
+    """Store a proposed write action and return the proposed_action payload."""
+    import uuid as _uuid
+    from datetime import datetime, timedelta
+    action_id = str(_uuid.uuid4())
+    expires_at = (datetime.utcnow() + timedelta(seconds=_ACTION_TTL_SECONDS)).isoformat() + "Z"
+    _pending_actions[action_id] = {
+        "tool": tool_name,
+        "args": args,
+        "idempotency_key": idempotency_key,
+        "description": description,
+        "expires_at": expires_at,
+        "executed": False,
+        "cancelled": False,
+    }
+    return {
+        "type": "proposed_action",
+        "action_id": action_id,
+        "description": description,
+        "tool": tool_name,
+        "args": args,
+        "expires_at": expires_at,
+        "requires_confirmation": True,
+    }
+
+
+def _execute_pending_action(action_id: str, user_id: str = "default") -> Dict[str, Any]:
+    """Execute a confirmed pending action. Returns the tool result dict."""
+    from datetime import datetime
+    action = _pending_actions.get(action_id)
+    if not action:
+        raise HTTPException(status_code=404, detail=f"Action '{action_id}' not found or expired.")
+    if action["executed"]:
+        raise HTTPException(status_code=409, detail="This action has already been executed.")
+    if action["cancelled"]:
+        raise HTTPException(status_code=409, detail="This action was cancelled.")
+    now = datetime.utcnow()
+    try:
+        exp = datetime.fromisoformat(action["expires_at"].rstrip("Z"))
+    except Exception:
+        exp = now
+    if now > exp:
+        del _pending_actions[action_id]
+        raise HTTPException(status_code=410, detail="This action has expired. Please try again.")
+
+    tool = action["tool"]
+    args = action["args"]
+    idem_key = action["idempotency_key"]
+
+    if tool == "create_journal_entry":
+        args_with_key = {**args, "idempotency_key": idem_key}
+        result = _execute_create_journal_entry(**args_with_key)
+    elif tool == "create_payment":
+        result = _execute_create_payment(**args)
+    elif tool == "create_sales_invoice":
+        result = _execute_create_sales_invoice(**args)
+    elif tool == "create_purchase_invoice":
+        result = _execute_create_purchase_invoice(**args)
+    elif tool == "create_purchase_order":
+        result = _execute_create_purchase_order(**args)
+    elif tool == "create_item":
+        result = _execute_create_item(**args)
+    elif tool == "create_party":
+        result = _execute_create_party(**args)
+    else:
+        raise HTTPException(status_code=400, detail=f"Tool '{tool}' is not a writable tool.")
+
+    action["executed"] = True
+    db.add_audit_log(
+        ref_type="AIAction",
+        ref_name=action_id,
+        action="CONFIRMED",
+        details=f"User {user_id} confirmed action: {action['description']}"
+    )
+    return result
+
+
+def _cancel_pending_action(action_id: str, user_id: str = "default"):
+    """Cancel a pending action and log the cancellation."""
+    action = _pending_actions.get(action_id)
+    if not action:
+        raise HTTPException(status_code=404, detail=f"Action '{action_id}' not found.")
+    if action["executed"]:
+        raise HTTPException(status_code=409, detail="This action has already been executed.")
+    action["cancelled"] = True
+    db.add_audit_log(
+        ref_type="AIAction",
+        ref_name=action_id,
+        action="user_cancelled",
+        details=f"User {user_id} cancelled action: {action['description']}"
+    )
+    return {"success": True, "message": "Action cancelled."}
+
+
+class ConfirmActionRequest(BaseModel):
+    action_id: str
+    user_id: str = "default"
+    confirmed: bool = True
+
+
+@router.post("/confirm-action")
+async def confirm_action(req: ConfirmActionRequest):
+    """Gap 2: Confirm or cancel a proposed AI write action."""
+    if req.confirmed:
+        result = _execute_pending_action(req.action_id, req.user_id)
+        return {"success": True, "executed": True, "result": result}
+    else:
+        return _cancel_pending_action(req.action_id, req.user_id)
+
+
 @router.post("/chat")
 async def ai_chat_endpoint(req: ChatRequest):
     messages_payload = [m.model_dump(exclude_none=True) for m in req.messages]
@@ -1290,6 +1537,14 @@ async def ai_chat_endpoint(req: ChatRequest):
     api_key = os.environ.get("OPENROUTER_API_KEY") or OPENROUTER_API_KEY
     model_id = os.environ.get("OPENROUTER_MODEL") or MODEL_ID
 
+    # TODO: Add LLM observability (Langfuse, Phoenix, or similar).
+    # Every AI request should log:
+    #   - user_message, model, prompt_version
+    #   - tool_selected, tool_args
+    #   - validation_result, execution_result
+    #   - latency_ms, token_cost
+    # This is required before onboarding production users for debugging
+    # and compliance.
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=15.0, connect=3.0)) as client:
             for step in range(3):
@@ -1329,6 +1584,27 @@ async def ai_chat_endpoint(req: ChatRequest):
                         fn_args = json.loads(fn.get("arguments", "{}"))
 
                         tool_output = None
+                        # Gap 2: Write tools require human confirmation
+                        if fn_name in WRITE_TOOLS:
+                            idem_key = generate_idempotency_key(last_user_msg)
+                            description = f"AI proposed: {fn_name}({json.dumps(fn_args)[:200]})"
+                            proposal = _store_pending_action(
+                                tool_name=fn_name,
+                                args=fn_args,
+                                idempotency_key=idem_key,
+                                description=description,
+                            )
+                            return {
+                                "role": "assistant",
+                                "content": (
+                                    f"I'd like to {fn_name.replace('_', ' ')} for you. "
+                                    f"{description}\n\n"
+                                    "Please confirm to proceed, or cancel. \u2764\ufe0f"
+                                ),
+                                **proposal,
+                                "executed_tools": [],
+                            }
+
                         try:
                             if fn_name == "get_customers":
                                 tool_output = _execute_get_customers(**fn_args)
@@ -1481,3 +1757,348 @@ async def submit_or_draft_doc(req: DocSubmitRequest):
             "doc_name": req.doc_name,
             "message": f"Transaction {req.doc_name} kept as Draft."
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PaddleOCR Document Processing Endpoints
+# P0-FIX-3: Double-post prevention via idempotency
+# P0-FIX-4: Temp file cleanup in finally block
+# P0-FIX-6: Session-bound file_id
+# P0-FIX-7: Async OCR execution (off event loop)
+# P0-FIX-9: Closed period check before posting
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# P0-FIX-2: Persist upload jobs to collection (MongoDB / document store with TTL and unique index)
+from backend.core.upload_jobs_db import upload_jobs
+
+# Upload directory
+_UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "entri_uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+
+# Allowed file extensions and MIME magic bytes
+_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+_PDF_MAGIC = b"%PDF"
+_PNG_MAGIC = b"\x89PNG"
+_JPG_MAGIC = b"\xff\xd8\xff"
+
+
+@router.post("/upload-document")
+async def upload_document(file: UploadFile = File(...)):
+    """
+    Upload a bank statement, invoice, or voucher for OCR processing.
+    Returns structured transaction preview (no ledger writes).
+    """
+    # Validate file extension
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Accepted: PDF, JPG, PNG."
+        )
+
+    # Read file content
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    if len(content) > 20 * 1024 * 1024:  # 20MB limit
+        raise HTTPException(status_code=413, detail="File too large. Maximum 20MB.")
+
+    # Validate magic bytes (reject renamed files)
+    if ext == ".pdf" and not content[:4].startswith(_PDF_MAGIC):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid PDF")
+    if ext == ".png" and not content[:4].startswith(_PNG_MAGIC):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid PNG")
+    if ext in (".jpg", ".jpeg") and not content[:3].startswith(_JPG_MAGIC):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid JPEG")
+
+    # Generate file_id and session_token [P0-FIX-6]
+    file_id = str(uuid.uuid4())
+    session_token = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    # Save temp file
+    file_path = os.path.join(_UPLOAD_DIR, f"{file_id}{ext}")
+
+    try:
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        # P0-FIX-7: Run OCR off the event loop
+        from backend.api.ocr_engine import extract_document
+        ocr_result = await asyncio.to_thread(extract_document, file_path)
+
+        if ocr_result.get("error"):
+            return {
+                "success": False,
+                "file_id": file_id,
+                "error": ocr_result["error"],
+                "transactions": [],
+            }
+
+        # Parse the document
+        from backend.api.document_parser import (
+            detect_document_type, detect_bank, parse_bank_statement,
+            parse_invoice, parse_voucher
+        )
+        from backend.api.account_categorizer import categorize_transaction
+
+        raw_lines = ocr_result["raw_lines"]
+        confidence_scores = ocr_result["confidence_scores"]
+        doc_type = detect_document_type(raw_lines)
+
+        parsed = {"transactions": [], "total_mismatch": False}
+
+        if doc_type == "bank_statement":
+            bank = detect_bank(raw_lines)
+            parsed = parse_bank_statement(raw_lines, bank, confidence_scores)
+        elif doc_type == "invoice":
+            inv = parse_invoice(raw_lines)
+            # Convert invoice items to transaction-like dicts
+            for item in inv.get("items", []):
+                parsed["transactions"].append({
+                    "date": inv.get("date", ""),
+                    "description": item.get("description", ""),
+                    "amount": item.get("amount", 0),
+                    "direction": "debit",
+                    "confidence": 1.0,
+                    "flagged_for_review": False,
+                    "flag_reason": None,
+                    "line_index": 0,
+                    "raw_line": "",
+                })
+        elif doc_type == "voucher":
+            vch = parse_voucher(raw_lines)
+            if vch.get("amount"):
+                parsed["transactions"].append({
+                    "date": vch.get("date", ""),
+                    "description": vch.get("narration", vch.get("payee", "Payment Voucher")),
+                    "amount": vch["amount"],
+                    "direction": "debit",
+                    "confidence": 1.0,
+                    "flagged_for_review": False,
+                    "flag_reason": None,
+                    "line_index": 0,
+                    "raw_line": "",
+                })
+
+        # Categorize each transaction
+        try:
+            accounts = [a.to_dict() for a in db.get_all_docs("Account")]
+        except Exception:
+            accounts = []
+
+        categorized_transactions = []
+        for txn in parsed.get("transactions", []):
+            cat = categorize_transaction(
+                txn.get("description", ""),
+                txn.get("amount", 0),
+                txn.get("direction", "debit"),
+                accounts,
+            )
+            txn["account"] = cat["account"]
+            txn["account_root_type"] = cat["root_type"]
+            txn["categorization_confidence"] = cat["confidence"]
+            if cat["flagged_for_review"]:
+                txn["flagged_for_review"] = True
+                existing_reason = txn.get("flag_reason") or ""
+                cat_reason = cat.get("flag_reason") or ""
+                txn["flag_reason"] = f"{existing_reason}; {cat_reason}".strip("; ")
+            categorized_transactions.append(txn)
+
+        # Store upload job [P0-FIX-3 + P0-FIX-6 + P0-FIX-2 persistence]
+        from datetime import datetime, timezone, timedelta
+        now_utc = datetime.now(timezone.utc)
+        expires_utc = now_utc + timedelta(hours=1)
+
+        job_doc = {
+            "job_id": file_id,
+            "company_id": "default_company",
+            "user_id": "default",
+            "session_token": session_token,
+            "file_name": file.filename,
+            "file_hash": file_hash,
+            "status": "ready",
+            "parsed_transactions": categorized_transactions,
+            "flagged_transactions": [t for t in categorized_transactions if t.get("flagged_for_review")],
+            "total_mismatch": parsed.get("total_mismatch", False),
+            "doc_type": doc_type,
+            "opening_balance": parsed.get("opening_balance"),
+            "closing_balance": parsed.get("closing_balance"),
+            "created_at": now_utc,
+            "expires_at": expires_utc,
+            "posted_at": None,
+            "posted_entries": [],
+        }
+        upload_jobs.insert_one(job_doc)
+
+        flagged_count = sum(1 for t in categorized_transactions if t.get("flagged_for_review"))
+
+        return {
+            "success": True,
+            "file_id": file_id,
+            "session_token": session_token,
+            "doc_type": doc_type,
+            "transactions": categorized_transactions,
+            "transaction_count": len(categorized_transactions),
+            "flagged_count": flagged_count,
+            "total_mismatch": parsed.get("total_mismatch", False),
+            "opening_balance": parsed.get("opening_balance"),
+            "closing_balance": parsed.get("closing_balance"),
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Document processing failed: {str(e)}")
+
+    finally:
+        # P0-FIX-4: Always clean up temp file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError:
+            pass
+
+
+class PostDocumentRequest(BaseModel):
+    file_id: str
+    session_token: str
+    transaction_overrides: Optional[Dict[int, str]] = None  # {line_index: new_account_name}
+
+
+@router.post("/post-document")
+async def post_document_transactions(req: PostDocumentRequest):
+    """
+    Post OCR-extracted transactions to the ledger as journal entries.
+    P0-FIX-3: Idempotency — blocks double-posting.
+    P0-FIX-6: Session token validation.
+    P0-FIX-9: Closed period check.
+    """
+    job = upload_jobs.find_one({"job_id": req.file_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Upload job not found. Please re-upload the document.")
+
+    # P0-FIX-6: Validate session token
+    if job.get("session_token") != req.session_token:
+        raise HTTPException(status_code=403, detail="Session token mismatch. Access denied.")
+
+    # P0-FIX-3: Idempotency check
+    if job.get("status") == "posted":
+        return {
+            "success": False,
+            "already_posted": True,
+            "message": "These transactions have already been posted to the ledger.",
+        }
+
+    if job.get("total_mismatch"):
+        return {
+            "success": False,
+            "message": "Cannot post: document total does not match sum of extracted transactions. Please review manually.",
+        }
+
+    # Mark as posted BEFORE writing entries [P0-FIX-3 idempotency]
+    from datetime import datetime, timezone
+    now_posted = datetime.now(timezone.utc)
+    upload_jobs.update_one(
+        {"job_id": req.file_id},
+        {"$set": {"status": "posted", "posted_at": now_posted}}
+    )
+    job["status"] = "posted"
+
+    transactions = job.get("parsed_transactions") or job.get("transactions", [])
+    posted = []
+    blocked = []
+    skipped = []
+
+    # Apply any account overrides from the user
+    overrides = req.transaction_overrides or {}
+
+    for txn in transactions:
+        # Skip flagged transactions (user should fix them first)
+        if txn.get("flagged_for_review") and txn.get("line_index") not in overrides:
+            skipped.append({
+                "description": txn.get("description", ""),
+                "amount": txn.get("amount", 0),
+                "reason": txn.get("flag_reason", "Flagged for review"),
+            })
+            continue
+
+        # Apply override if provided
+        account = overrides.get(txn.get("line_index"), txn.get("account", "Miscellaneous Expense"))
+
+        # P0-FIX-9: Closed period check
+        txn_date = txn.get("date", "")
+        if txn_date:
+            try:
+                from backend.core.close_management import get_period_for_date
+                period = get_period_for_date("default_company", txn_date)
+                if period and period.get("status") in ("CLOSED", "LOCKED"):
+                    blocked.append({
+                        "description": txn.get("description", ""),
+                        "amount": txn.get("amount", 0),
+                        "date": txn_date,
+                        "reason": f"Period {period.get('label', txn_date)} is closed",
+                    })
+                    continue
+            except Exception:
+                pass  # No period management — allow posting
+
+        # Build journal entry
+        amount = txn.get("amount", 0)
+        direction = txn.get("direction", "debit")
+        remark = f"OCR: {txn.get('description', 'Document transaction')}"
+        d_str = txn_date or date_cls.today().isoformat()
+
+        if direction == "debit":
+            entries = [
+                {"account": account, "debit": amount, "credit": 0},
+                {"account": "Cash", "debit": 0, "credit": amount},
+            ]
+        else:
+            entries = [
+                {"account": "Cash", "debit": amount, "credit": 0},
+                {"account": account, "debit": 0, "credit": amount},
+            ]
+
+        try:
+            result = _execute_create_journal_entry(entries=entries, remark=remark, date=d_str)
+            if result.get("success"):
+                posted.append({
+                    "description": txn.get("description", ""),
+                    "amount": amount,
+                    "account": account,
+                    "journal_entry": result.get("journal_name", ""),
+                })
+            else:
+                blocked.append({
+                    "description": txn.get("description", ""),
+                    "amount": amount,
+                    "reason": result.get("message", "Failed to post"),
+                })
+        except Exception as e:
+            blocked.append({
+                "description": txn.get("description", ""),
+                "amount": amount,
+                "reason": str(e),
+            })
+
+    # Store posted entry names for potential rollback
+    posted_entry_ids = [p.get("journal_entry") for p in posted]
+    upload_jobs.update_one(
+        {"job_id": req.file_id},
+        {"$set": {"posted_entries": posted_entry_ids}}
+    )
+
+    return {
+        "success": True,
+        "posted_count": len(posted),
+        "blocked_count": len(blocked),
+        "skipped_count": len(skipped),
+        "posted": posted,
+        "blocked": blocked,
+        "skipped": skipped,
+        "message": f"Posted {len(posted)} transactions. {len(blocked)} blocked. {len(skipped)} skipped (flagged for review).",
+    }
