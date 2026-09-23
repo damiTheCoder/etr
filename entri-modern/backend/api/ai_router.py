@@ -1583,7 +1583,7 @@ async def ai_chat_endpoint(req: ChatRequest):
     # This is required before onboarding production users for debugging
     # and compliance.
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=15.0, connect=3.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=45.0, connect=10.0)) as client:
             for step in range(3):
                 body = {
                     "model": model_id,
@@ -1707,7 +1707,7 @@ async def ai_chat_endpoint(req: ChatRequest):
                             "content": json.dumps(tool_output)
                         })
                 else:
-                    raw_content = msg.get("content", "").strip()
+                    raw_content = (msg.get("content") or msg.get("reasoning") or msg.get("reasoning_content") or choice.get("text") or "").strip()
                     if raw_content.startswith("{") and raw_content.endswith("}"):
                         try:
                             parsed_json = json.loads(raw_content)
