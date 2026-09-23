@@ -33,7 +33,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 router = APIRouter(prefix="/api/ai", tags=["AI Agent"])
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-MODEL_ID = os.environ.get("OPENROUTER_MODEL", "openrouter/auto")
+MODEL_ID = os.environ.get("OPENROUTER_MODEL", "nex-agi/nex-n2.5-pro:free")
 
 # Full suite of 23 Tool Schemas for OpenRouter AI Agent
 TOOLS_SCHEMA = [
@@ -1329,16 +1329,49 @@ def _local_fallback_intent_executor(user_text: str, user_id: str = "default", re
             "executed_tools": [{"name": "get_aging_report", "arguments": {}, "result": res}]
         }
 
-    # Clarification prompt when intent is ambiguous (warm, loving, ever-ready)
+    # Bank Statements / Document Uploads / OCR Preparation
+    if any(k in t for k in ["statement", "upload", "ocr", "attach", "pdf", "bank stmt", "bank statement", "document", "voucher"]):
+        return {
+            "role": "assistant",
+            "content": (
+                "Yes! Absolutely, I can prepare your accounting directly from your bank statement! 📄✨\n\n"
+                "Here is how we can do it right now:\n"
+                "1. Click the **`+` (Add attachment)** button right here below in the chat box.\n"
+                "2. Choose your bank statement file (we support **PDF**, **JPG**, or **PNG**).\n"
+                "3. Hit send! Our built-in document engine will read all transactions, match them against your Chart of Accounts, and present a clean preview table for you to review.\n"
+                "4. Once you give the thumbs up, you can post them straight to your ledger with one click.\n\n"
+                "Whenever you're ready, click **`+`** and upload your statement — I'm right here to process it for you! ❤️"
+            ),
+            "executed_tools": []
+        }
+
+    # Questions or inquiries about capabilities ("can you...", "how do i...", "what can you do")
+    if any(k in t for k in ["can you", "could you", "how do i", "how can i", "what can you", "are you able", "help me with"]):
+        return {
+            "role": "assistant",
+            "content": (
+                f"Yes, I can certainly help you with that! ❤️\n\n"
+                "I am your dedicated accounting companion for our business. Here is what I can do right here in our conversation:\n\n"
+                "• **Process Bank Statements & Documents**: Click the **`+`** button to upload bank statements, invoices, or vouchers. I will automatically extract the lines, categorize each transaction, check debit/credit balance, and prepare them for one-click ledger posting.\n"
+                "• **Book Everyday Expenses & Sales**: Simply tell me in plain English (e.g. *'paid rent ₦25,000'* or *'received ₦150,000 from Client X'*), and I will build balanced journal entries.\n"
+                "• **Generate Real-Time Financial Reports**: Ask me *'show my P&L'*, *'how is my business doing'*, *'give me a balance sheet'*, or *'check cash balance'* to see our numbers instantly.\n"
+                "• **Manage Invoices & Customers**: Ask me to create or review invoices and customers.\n\n"
+                "What would you like us to work on first?"
+            ),
+            "executed_tools": []
+        }
+
+    # Context-aware fallback: acknowledge the user's specific text before guiding
+    first_few_words = " ".join(user_text.strip().split()[:7])
     return {
         "role": "assistant",
         "content": (
-            "I'm right here with you and always ready to help! ❤️\n\n"
-            "What can I take care of for our business today?\n"
-            "• **Record a transaction** (e.g. *'paid rent ₦10,000'* or *'received ₦25,000 from client'*)\n"
-            "• **Review our business health** (e.g. *'show P&L'*, *'how is my business doing'*, or *'balance sheet'*)\n"
-            "• **Create or view invoices** (e.g. *'new sales invoice'* or *'show customers'*)\n\n"
-            "Your business's growth and financial peace of mind are always my top priority!"
+            f"I hear you! You asked about: *\"{first_few_words}...\"* ❤️\n\n"
+            "I'm right here with you and always ready to help! To give you the exact financial answer or record what you need, let me know if you would like to:\n"
+            "• **Upload a bank statement or invoice**: Click the **`+`** button below to attach your document for automatic extraction.\n"
+            "• **Record a payment or transaction**: Tell me the amount and description (e.g. *'paid shop rent ₦10,000'*).\n"
+            "• **Check your financials**: Ask me *'show P&L'* or *'how is my business doing'*\n\n"
+            "Let me know how you'd like to proceed!"
         ),
         "executed_tools": []
     }
@@ -1523,7 +1556,11 @@ async def ai_chat_endpoint(req: ChatRequest):
             "2. When the user asks for financial reports or asks how their business is doing (keywords: report, how is my business, performance, p&l, balance sheet, cash, metrics):\n"
             "   - Call the relevant reporting tools (get_profit_and_loss, get_dashboard_metrics, get_balance_sheet, get_general_ledger, get_trial_balance, get_aging_report).\n"
             "   - Provide a heartfelt, insightful overview of their business health, highlighting strengths and offering gentle guidance for what to watch next.\n"
-            "3. If a tool fails or needs clarification, explain with kindness and helpful suggestions, never failing silently.\n"
+            "3. When the user asks about uploading bank statements, invoices, or receipts for accounting:\n"
+            "   - Enthusiastically confirm you can process their documents!\n"
+            "   - Explain that they can click the '+' attachment button in the chat box to upload PDF, JPG, or PNG files.\n"
+            "   - Explain that you will extract, parse, categorize, and prepare the transactions for their review before posting to the ledger.\n"
+            "4. If a tool fails or needs clarification, explain with kindness and helpful suggestions, never failing silently.\n"
             "Available tools: get_customers, get_parties, create_party, get_sales_invoices, create_sales_invoice, "
             "get_purchase_invoices, create_purchase_invoice, get_payments, create_payment, get_journal_entries, "
             "create_journal_entry, get_purchase_orders, create_purchase_order, get_items, create_item, get_accounts, "
