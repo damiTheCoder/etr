@@ -7,11 +7,18 @@ import { Marker } from "./marker"
 
 import { NeatResponseText } from "./neat-response-text"
 import { DocumentPreview } from "@/components/chat/document-preview"
+import { ReasoningPanel, TodoItem, ToolCallItem } from "@/components/chat/reasoning-panel"
+
+export type { TodoItem, ToolCallItem }
 
 export interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  reasoning?: string
+  todos?: TodoItem[]
+  toolCalls?: ToolCallItem[]
+  isStreaming?: boolean
   executedTools?: any[]
   documentPreview?: string
   createdAt: string
@@ -46,6 +53,17 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
             ) : (
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <ChatBubbleMessage variant="assistant">
+                  {(Boolean(m.reasoning) || (m.todos && m.todos.length > 0) || (m.toolCalls && m.toolCalls.length > 0)) && (
+                    <ReasoningPanel
+                      messageId={m.id}
+                      isStreaming={m.isStreaming ?? false}
+                      reasoningText={m.reasoning ?? ""}
+                      todos={m.todos ?? []}
+                      toolCalls={m.toolCalls ?? []}
+                      defaultExpanded={m.isStreaming}
+                    />
+                  )}
+
                   <NeatResponseText content={m.content} />
 
                   {m.executedTools && m.executedTools.length > 0 && (

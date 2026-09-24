@@ -246,49 +246,155 @@ export default function AIChat({ onCloseModal, onExpand, isExpanded }: AIChatPro
         return
       }
 
-      // --- Normal chat flow ---
+      // --- Normal chat flow with SSE Streaming ---
       const apiMessages = newMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }))
 
-      const response = await fetch("/api/ai/chat", {
+      const assistantMsgId = (Date.now() + 1).toString()
+      let assistantMsg: Message = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        reasoning: "",
+        todos: [],
+        toolCalls: [],
+        isStreaming: true,
+        createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }
+
+      // Add placeholder to active session messages immediately
+      updateActiveSessionMessages((prev) => [...prev, assistantMsg])
+
+      const response = await fetch("/api/ai/chat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "text/event-stream",
         },
         signal: controller.signal,
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, stream: true }),
       })
 
       if (!response.ok) {
         throw new Error(`Server returned status ${response.status}`)
       }
 
-      const data = await response.json()
+      if (!response.body) {
+        throw new Error("No response body received from stream endpoint")
+      }
 
-      if (data.executed_tools && Array.isArray(data.executed_tools)) {
-        for (const tool of data.executed_tools) {
-          if (tool.name === "navigate_to_page" && tool.result && tool.result.route) {
-            setTimeout(() => {
-              navigate(tool.result.route)
-              if (onCloseModal) {
-                onCloseModal()
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { value, done: streamDone } = await reader.read()
+        if (streamDone) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith("data: ")) continue
+          const dataStr = trimmed.slice(6).trim()
+          if (!dataStr || dataStr === "[DONE]") continue
+
+          try {
+            const event = JSON.parse(dataStr)
+            switch (event.type) {
+              case "reasoning_start":
+                assistantMsg = { ...assistantMsg, reasoning: "" }
+                break
+              case "reasoning_token":
+                assistantMsg = { ...assistantMsg, reasoning: (assistantMsg.reasoning || "") + (event.content || "") }
+                break
+              case "reasoning_end":
+                break
+              case "todo": {
+                const currentTodos = assistantMsg.todos ? [...assistantMsg.todos] : []
+                const existingIdx = currentTodos.findIndex((t) => t.id === event.id)
+                if (existingIdx >= 0) {
+                  currentTodos[existingIdx] = {
+                    ...currentTodos[existingIdx],
+                    status: event.status || currentTodos[existingIdx].status,
+                    label: event.label || currentTodos[existingIdx].label,
+                  }
+                } else {
+                  currentTodos.push({
+                    id: event.id,
+                    label: event.label || `Step ${event.id}`,
+                    status: event.status || "pending",
+                  })
+                }
+                assistantMsg = { ...assistantMsg, todos: currentTodos }
+                break
               }
-            }, 800)
+              case "tool_call": {
+                const currentTools = assistantMsg.toolCalls ? [...assistantMsg.toolCalls] : []
+                currentTools.push({
+                  name: event.name,
+                  args: event.args || {},
+                  status: "running",
+                })
+                assistantMsg = { ...assistantMsg, toolCalls: currentTools }
+                break
+              }
+              case "tool_result": {
+                const currentTools = assistantMsg.toolCalls ? [...assistantMsg.toolCalls] : []
+                const matchIdx = currentTools.findIndex((t) => t.name === event.name && t.status === "running")
+                if (matchIdx >= 0) {
+                  currentTools[matchIdx] = {
+                    ...currentTools[matchIdx],
+                    status: "completed",
+                    summary: event.summary,
+                  }
+                } else {
+                  currentTools.push({
+                    name: event.name,
+                    status: "completed",
+                    summary: event.summary,
+                  })
+                }
+                assistantMsg = { ...assistantMsg, toolCalls: currentTools }
+                if (event.name === "navigate_to_page") {
+                  const targetTool = currentTools.find((t) => t.name === "navigate_to_page")
+                  const route = targetTool?.args?.page_route
+                  if (route) {
+                    setTimeout(() => {
+                      navigate(route)
+                      if (onCloseModal) onCloseModal()
+                    }, 800)
+                  }
+                }
+                break
+              }
+              case "token":
+                assistantMsg = { ...assistantMsg, content: (assistantMsg.content || "") + (event.content || "") }
+                break
+              case "done":
+                assistantMsg = { ...assistantMsg, isStreaming: false }
+                break
+            }
+
+            // Update the single assistant message in-place
+            updateActiveSessionMessages((prev) =>
+              prev.map((m) => (m.id === assistantMsgId ? assistantMsg : m))
+            )
+          } catch (e) {
+            /* ignore parse errors on malformed chunks */
           }
         }
       }
 
-      const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.content || "",
-        executedTools: data.executed_tools,
-        createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      }
-
-      updateActiveSessionMessages((prev) => [...prev, assistantMsg])
+      // Mark streaming complete
+      assistantMsg = { ...assistantMsg, isStreaming: false }
+      updateActiveSessionMessages((prev) =>
+        prev.map((m) => (m.id === assistantMsgId ? assistantMsg : m))
+      )
     } catch (err: any) {
       if (err.name === "AbortError") {
         const cancelMsg: Message = {

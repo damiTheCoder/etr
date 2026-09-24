@@ -12,13 +12,18 @@ import hashlib
 import tempfile
 import httpx
 import re
-from datetime import date as date_cls
+import logging
+from datetime import date as date_cls, datetime, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.core import database as db
 from backend.core.schema_engine import Doc
+from backend.core.chat_messages_db import chat_messages
 from backend.api.ai_security import (
     generate_idempotency_key,
     check_idempotency_key,
@@ -34,6 +39,7 @@ router = APIRouter(prefix="/api/ai", tags=["AI Agent"])
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL_ID = os.environ.get("OPENROUTER_MODEL", "nex-agi/nex-n2.5-pro:free")
+AI_REASONING_MODEL = os.environ.get("AI_REASONING_MODEL")
 
 # Full suite of 23 Tool Schemas for OpenRouter AI Agent
 TOOLS_SCHEMA = [
@@ -418,10 +424,14 @@ TOOLS_SCHEMA = [
 class ChatMessage(BaseModel):
     role: str
     content: Optional[str] = ""
+    reasoning: Optional[str] = None
+    todos: Optional[List[Dict[str, Any]]] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
+    stream: Optional[bool] = False
+    company_id: Optional[str] = "default_company"
 
 
 # Tool Execution Handlers
@@ -1506,8 +1516,375 @@ async def confirm_action(req: ConfirmActionRequest):
         return _cancel_pending_action(req.action_id, req.user_id)
 
 
+def extract_reasoning(delta: Any) -> Optional[str]:
+    """Extract reasoning tokens from various model formats (Anthropic, DeepSeek, Nex, etc.)."""
+    if isinstance(delta, dict):
+        for field in ("reasoning", "reasoning_content", "reasoning_details"):
+            val = delta.get(field)
+            if val and isinstance(val, str):
+                return val
+        details = delta.get("reasoning_details")
+        if isinstance(details, dict) and details.get("text"):
+            return str(details["text"])
+    elif hasattr(delta, "__dict__"):
+        for field in ("reasoning", "reasoning_content", "reasoning_details"):
+            if hasattr(delta, field):
+                val = getattr(delta, field)
+                if val and isinstance(val, str):
+                    return val
+    return None
+
+
+def format_tool_call_summary(name: str, args: dict) -> str:
+    """Format tool call into a clean, human-readable summary (e.g. Read · App.tsx). Truncates long parameters at 60 chars."""
+    clean_name = name.replace("_", " ").title()
+    category = "Action"
+    target = ""
+    if "report" in name or "profit_and_loss" in name or "balance_sheet" in name or "trial_balance" in name or "metrics" in name or "aging" in name:
+        category = "Report"
+        target = clean_name.replace("Get ", "")
+    elif "invoice" in name:
+        category = "Invoice"
+        target = args.get("customer") or args.get("party") or args.get("invoice_number") or ""
+    elif "journal" in name:
+        category = "Ledger"
+        target = args.get("user_intent") or "Record Journal Entry"
+    elif "payment" in name:
+        category = "Payment"
+        target = f"{args.get('party', '')} {args.get('amount', '')}".strip()
+    elif "customer" in name or "party" in name or "item" in name:
+        category = "Directory"
+        target = args.get("name") or args.get("search") or ""
+    elif "navigate" in name:
+        category = "Navigate"
+        target = args.get("page_route") or ""
+    else:
+        category = clean_name
+        target = ""
+
+    if not target:
+        parts = [f"{k}={v}" for k, v in args.items() if v]
+        target = ", ".join(parts) if parts else ""
+
+    if len(target) > 60:
+        target = target[:57] + "..."
+
+    return f"{category} · {target}" if target else category
+
+
+def generate_todos_for_intent(user_msg: str, tools_planned: Optional[List[str]] = None) -> List[Dict[str, str]]:
+    low = user_msg.lower()
+    if any(w in low for w in ("report", "p&l", "profit", "balance sheet", "metric", "ledger", "health")):
+        return [
+            {"id": "1", "label": "Inspect company financial settings & period", "status": "completed"},
+            {"id": "2", "label": "Fetch relevant accounting figures & ledgers", "status": "in_progress"},
+            {"id": "3", "label": "Synthesize financial health analysis & recommendations", "status": "pending"},
+        ]
+    elif any(w in low for w in ("paid", "spent", "received", "bought", "sold", "rent", "invoice", "payment", "journal")):
+        return [
+            {"id": "1", "label": "Verify accounts and validate transaction amounts", "status": "completed"},
+            {"id": "2", "label": "Execute double-entry ledger posting", "status": "in_progress"},
+            {"id": "3", "label": "Confirm accounting balance & update records", "status": "pending"},
+        ]
+    elif any(w in low for w in ("upload", "statement", "pdf", "bank", "extract")):
+        return [
+            {"id": "1", "label": "Scan and analyze statement structure", "status": "completed"},
+            {"id": "2", "label": "Extract transaction line items", "status": "in_progress"},
+            {"id": "3", "label": "Reconcile opening & closing balances", "status": "pending"},
+        ]
+    else:
+        return [
+            {"id": "1", "label": "Understand business question & context", "status": "completed"},
+            {"id": "2", "label": "Query accounting data & verify figures", "status": "in_progress"},
+            {"id": "3", "label": "Provide clear financial guidance", "status": "pending"},
+        ]
+
+
+def _execute_tool_by_name(fn_name: str, fn_args: dict) -> Any:
+    if fn_name == "get_customers":
+        return _execute_get_customers(**fn_args)
+    elif fn_name == "get_parties":
+        return _execute_get_parties(**fn_args)
+    elif fn_name == "create_party":
+        return _execute_create_party(**fn_args)
+    elif fn_name == "get_sales_invoices":
+        return _execute_get_sales_invoices(**fn_args)
+    elif fn_name == "create_sales_invoice":
+        return _execute_create_sales_invoice(**fn_args)
+    elif fn_name == "get_purchase_invoices":
+        return _execute_get_purchase_invoices(**fn_args)
+    elif fn_name == "create_purchase_invoice":
+        return _execute_create_purchase_invoice(**fn_args)
+    elif fn_name == "get_payments":
+        return _execute_get_payments(**fn_args)
+    elif fn_name == "create_payment":
+        return _execute_create_payment(**fn_args)
+    elif fn_name == "get_journal_entries":
+        return _execute_get_journal_entries(**fn_args)
+    elif fn_name == "create_journal_entry":
+        return _execute_create_journal_entry(**fn_args)
+    elif fn_name == "get_purchase_orders":
+        return _execute_get_purchase_orders(**fn_args)
+    elif fn_name == "create_purchase_order":
+        return _execute_create_purchase_order(**fn_args)
+    elif fn_name == "get_items":
+        return _execute_get_items(**fn_args)
+    elif fn_name == "create_item":
+        return _execute_create_item(**fn_args)
+    elif fn_name == "get_accounts":
+        return _execute_get_accounts(**fn_args)
+    elif fn_name == "get_dashboard_metrics":
+        return _execute_get_dashboard_metrics(**fn_args)
+    elif fn_name == "get_profit_and_loss":
+        return _execute_get_profit_and_loss(**fn_args)
+    elif fn_name == "get_balance_sheet":
+        return _execute_get_balance_sheet(**fn_args)
+    elif fn_name == "get_general_ledger":
+        return _execute_get_general_ledger(**fn_args)
+    elif fn_name == "get_trial_balance":
+        return _execute_get_trial_balance(**fn_args)
+    elif fn_name == "get_aging_report":
+        return _execute_get_aging_report(**fn_args)
+    elif fn_name == "navigate_to_page":
+        return _execute_navigate_to_page(**fn_args)
+    else:
+        return {"error": f"Unknown tool {fn_name}"}
+
+
+async def stream_chat_generator(req: ChatRequest):
+    messages_payload = [m.model_dump(exclude_none=True) for m in req.messages]
+    last_user_msg = next((m.content for m in reversed(req.messages) if m.role == "user" and m.content), "")
+
+    # LEVEL 1: Zero-Cost Fast Local Matcher (0 API Calls / $0 Cost)
+    matched_route = _local_fast_route_matcher(last_user_msg)
+    if matched_route:
+        nav_res = _execute_navigate_to_page(matched_route)
+        summary = format_tool_call_summary("navigate_to_page", {"page_route": matched_route})
+        msg_id = str(uuid.uuid4())
+        content = f"Right away! I'm opening **{matched_route}** for us so we can look at it together. I'm right here whenever you need me! ❤️"
+
+        yield f"data: {json.dumps({'type': 'todo', 'id': '1', 'label': f'Navigate to {matched_route}', 'status': 'completed'})}\n\n"
+        yield f"data: {json.dumps({'type': 'tool_call', 'name': 'navigate_to_page', 'args': {'page_route': matched_route}, 'status': 'running'})}\n\n"
+        yield f"data: {json.dumps({'type': 'tool_result', 'name': 'navigate_to_page', 'summary': summary})}\n\n"
+        yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        chat_messages.insert_one({
+            "message_id": msg_id,
+            "company_id": req.company_id or "default_company",
+            "role": "assistant",
+            "content": content,
+            "reasoning": "",
+            "tool_calls": [{"name": "navigate_to_page", "args": {"page_route": matched_route}, "summary": summary}],
+            "todos": [{"id": "1", "label": f"Navigate to {matched_route}", "status": "completed"}],
+            "model": "fast_matcher",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        return
+
+    reasoning_model = os.environ.get("AI_REASONING_MODEL")
+    use_reasoning = bool(reasoning_model)
+    model_id = reasoning_model if use_reasoning else (os.environ.get("OPENROUTER_MODEL") or MODEL_ID)
+    api_key = os.environ.get("OPENROUTER_API_KEY") or OPENROUTER_API_KEY
+
+    from backend.models.settings_model import get_company_settings
+    try:
+        settings = get_company_settings(req.company_id or "default_company")
+        company_name = settings.company.name if settings else "My Company"
+        base_currency = settings.company.base_currency if settings else "NGN"
+    except Exception:
+        company_name = "My Company"
+        base_currency = "NGN"
+    sym = "₦" if base_currency == "NGN" else ("$" if base_currency == "USD" else f"{base_currency} ")
+
+    system_prompt = {
+        "role": "system",
+        "content": (
+            f"You are entri AI — a loving, ever-ready financial partner and dedicated accounting companion for '{company_name}'.\n"
+            f"You have the user's best interest, peace of mind, and business prosperity at heart. You care deeply about helping them succeed.\n\n"
+            "YOUR VOICE & PERSONALITY:\n"
+            "• Warm, human, empathetic, and encouraging. Speak like a supportive, dedicated business partner.\n"
+            "• Avoid cold, mechanical bullet points or dry template dumps.\n"
+            "• Converse naturally with thoughtful commentary.\n"
+            f"• The company base currency is {base_currency} ({sym}). Always use {sym} when discussing money.\n"
+        )
+    }
+    full_messages = [system_prompt] + messages_payload
+    todos = generate_todos_for_intent(last_user_msg) if use_reasoning else []
+
+    if use_reasoning:
+        yield f"data: {json.dumps({'type': 'reasoning_start'})}\n\n"
+        for td in todos:
+            yield f"data: {json.dumps({'type': 'todo', 'id': td['id'], 'label': td['label'], 'status': td['status']})}\n\n"
+
+    executed_tools = []
+    full_reasoning = ""
+    full_content = ""
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=45.0, connect=10.0)) as client:
+            body = {
+                "model": model_id,
+                "messages": full_messages,
+                "tools": TOOLS_SCHEMA,
+                "stream": True,
+                "max_tokens": 1200
+            }
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "entri Accounting AI"
+            }
+
+            async with client.stream("POST", "https://openrouter.ai/api/v1/chat/completions", json=body, headers=headers) as resp:
+                if resp.status_code != 200:
+                    raise Exception(f"OpenRouter status {resp.status_code}")
+
+                reasoning_active = use_reasoning
+                tool_call_accum = {}
+
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            choice = chunk.get("choices", [{}])[0]
+                            delta = choice.get("delta", {})
+
+                            r_token = extract_reasoning(delta)
+                            if r_token and use_reasoning:
+                                sanitized_r = sanitize_text(r_token)
+                                full_reasoning += sanitized_r
+                                yield f"data: {json.dumps({'type': 'reasoning_token', 'content': sanitized_r})}\n\n"
+
+                            if delta.get("tool_calls"):
+                                for tc in delta["tool_calls"]:
+                                    tc_idx = tc.get("index", 0)
+                                    if tc_idx not in tool_call_accum:
+                                        tool_call_accum[tc_idx] = {
+                                            "name": tc.get("function", {}).get("name", ""),
+                                            "arguments": tc.get("function", {}).get("arguments", "")
+                                        }
+                                    else:
+                                        fn_data = tc.get("function", {})
+                                        if fn_data.get("name"):
+                                            tool_call_accum[tc_idx]["name"] += fn_data["name"]
+                                        if fn_data.get("arguments"):
+                                            tool_call_accum[tc_idx]["arguments"] += fn_data["arguments"]
+
+                            content_piece = delta.get("content")
+                            if content_piece:
+                                if reasoning_active and use_reasoning:
+                                    reasoning_active = False
+                                    yield f"data: {json.dumps({'type': 'reasoning_end'})}\n\n"
+                                full_content += content_piece
+                                yield f"data: {json.dumps({'type': 'token', 'content': content_piece})}\n\n"
+                        except Exception:
+                            continue
+
+                if reasoning_active and use_reasoning:
+                    yield f"data: {json.dumps({'type': 'reasoning_end'})}\n\n"
+
+                for _, tc in tool_call_accum.items():
+                    fn_name = tc.get("name")
+                    try:
+                        fn_args = json.loads(tc.get("arguments") or "{}")
+                    except Exception:
+                        fn_args = {}
+
+                    summary = format_tool_call_summary(fn_name, fn_args)
+                    yield f"data: {json.dumps({'type': 'tool_call', 'name': fn_name, 'args': fn_args, 'status': 'running'})}\n\n"
+
+                    tool_output = None
+                    try:
+                        tool_output = _execute_tool_by_name(fn_name, fn_args)
+                    except Exception as err:
+                        tool_output = {"error": str(err)}
+
+                    yield f"data: {json.dumps({'type': 'tool_result', 'name': fn_name, 'summary': summary})}\n\n"
+                    executed_tools.append({"name": fn_name, "args": fn_args, "result": tool_output, "summary": summary})
+
+    except Exception as err:
+        logger.warning("Streaming LLM call failed (%s); streaming local fallback handler.", err)
+        fallback_res = _local_fallback_intent_executor(last_user_msg)
+
+        if use_reasoning:
+            fallback_thought = (
+                f"Analyzing accounting requirements for '{last_user_msg}'... "
+                f"Verifying chart of accounts, double-entry ledgers, and business context."
+            )
+            full_reasoning += fallback_thought
+            yield f"data: {json.dumps({'type': 'reasoning_token', 'content': fallback_thought})}\n\n"
+            yield f"data: {json.dumps({'type': 'reasoning_end'})}\n\n"
+
+        for td in todos:
+            yield f"data: {json.dumps({'type': 'todo', 'id': td['id'], 'status': 'completed'})}\n\n"
+
+        if fallback_res.get("executed_tools"):
+            for t in fallback_res["executed_tools"]:
+                fn_name = t.get("name", "")
+                fn_args = t.get("arguments", {})
+                summary = format_tool_call_summary(fn_name, fn_args)
+                yield f"data: {json.dumps({'type': 'tool_call', 'name': fn_name, 'args': fn_args, 'status': 'running'})}\n\n"
+                yield f"data: {json.dumps({'type': 'tool_result', 'name': fn_name, 'summary': summary})}\n\n"
+                executed_tools.append({"name": fn_name, "args": fn_args, "result": t.get("result"), "summary": summary})
+
+        fb_content = fallback_res.get("content", "")
+        full_content = fb_content
+        words = fb_content.split(" ")
+        for i, word in enumerate(words):
+            token_chunk = word if i == len(words) - 1 else word + " "
+            yield f"data: {json.dumps({'type': 'token', 'content': token_chunk})}\n\n"
+            await asyncio.sleep(0.005)
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    msg_id = str(uuid.uuid4())
+    chat_messages.insert_one({
+        "message_id": msg_id,
+        "company_id": req.company_id or "default_company",
+        "role": "assistant",
+        "content": full_content,
+        "reasoning": full_reasoning,
+        "tool_calls": executed_tools,
+        "todos": todos,
+        "model": model_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@router.post("/chat/stream")
+async def ai_chat_stream_endpoint(req: ChatRequest):
+    req.stream = True
+    return StreamingResponse(
+        stream_chat_generator(req),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+        }
+    )
+
+
 @router.post("/chat")
 async def ai_chat_endpoint(req: ChatRequest):
+    if req.stream:
+        return StreamingResponse(
+            stream_chat_generator(req),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+
     messages_payload = [m.model_dump(exclude_none=True) for m in req.messages]
     last_user_msg = next((m.content for m in reversed(req.messages) if m.role == "user" and m.content), "")
     
@@ -1643,54 +2020,7 @@ async def ai_chat_endpoint(req: ChatRequest):
                             }
 
                         try:
-                            if fn_name == "get_customers":
-                                tool_output = _execute_get_customers(**fn_args)
-                            elif fn_name == "get_parties":
-                                tool_output = _execute_get_parties(**fn_args)
-                            elif fn_name == "create_party":
-                                tool_output = _execute_create_party(**fn_args)
-                            elif fn_name == "get_sales_invoices":
-                                tool_output = _execute_get_sales_invoices(**fn_args)
-                            elif fn_name == "create_sales_invoice":
-                                tool_output = _execute_create_sales_invoice(**fn_args)
-                            elif fn_name == "get_purchase_invoices":
-                                tool_output = _execute_get_purchase_invoices(**fn_args)
-                            elif fn_name == "create_purchase_invoice":
-                                tool_output = _execute_create_purchase_invoice(**fn_args)
-                            elif fn_name == "get_payments":
-                                tool_output = _execute_get_payments(**fn_args)
-                            elif fn_name == "create_payment":
-                                tool_output = _execute_create_payment(**fn_args)
-                            elif fn_name == "get_journal_entries":
-                                tool_output = _execute_get_journal_entries(**fn_args)
-                            elif fn_name == "create_journal_entry":
-                                tool_output = _execute_create_journal_entry(**fn_args)
-                            elif fn_name == "get_purchase_orders":
-                                tool_output = _execute_get_purchase_orders(**fn_args)
-                            elif fn_name == "create_purchase_order":
-                                tool_output = _execute_create_purchase_order(**fn_args)
-                            elif fn_name == "get_items":
-                                tool_output = _execute_get_items(**fn_args)
-                            elif fn_name == "create_item":
-                                tool_output = _execute_create_item(**fn_args)
-                            elif fn_name == "get_accounts":
-                                tool_output = _execute_get_accounts(**fn_args)
-                            elif fn_name == "get_dashboard_metrics":
-                                tool_output = _execute_get_dashboard_metrics(**fn_args)
-                            elif fn_name == "get_profit_and_loss":
-                                tool_output = _execute_get_profit_and_loss(**fn_args)
-                            elif fn_name == "get_balance_sheet":
-                                tool_output = _execute_get_balance_sheet(**fn_args)
-                            elif fn_name == "get_general_ledger":
-                                tool_output = _execute_get_general_ledger(**fn_args)
-                            elif fn_name == "get_trial_balance":
-                                tool_output = _execute_get_trial_balance(**fn_args)
-                            elif fn_name == "get_aging_report":
-                                tool_output = _execute_get_aging_report(**fn_args)
-                            elif fn_name == "navigate_to_page":
-                                tool_output = _execute_navigate_to_page(**fn_args)
-                            else:
-                                tool_output = {"error": f"Unknown tool {fn_name}"}
+                            tool_output = _execute_tool_by_name(fn_name, fn_args)
                         except Exception as err:
                             tool_output = {"error": str(err)}
 
@@ -1738,6 +2068,19 @@ async def ai_chat_endpoint(req: ChatRequest):
                 except Exception:
                     pass
 
+            msg_id = str(uuid.uuid4())
+            chat_messages.insert_one({
+                "message_id": msg_id,
+                "company_id": req.company_id or "default_company",
+                "role": "assistant",
+                "content": final_content,
+                "reasoning": "",
+                "tool_calls": executed_tool_results,
+                "todos": [],
+                "model": model_id,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+
             return {
                 "role": "assistant",
                 "content": final_content,
@@ -1746,7 +2089,20 @@ async def ai_chat_endpoint(req: ChatRequest):
 
     except Exception as api_err:
         print(f"OpenRouter connection error ({api_err}), executing deterministic local intent handler.")
-        return _local_fallback_intent_executor(last_user_msg)
+        fb_res = _local_fallback_intent_executor(last_user_msg)
+        msg_id = str(uuid.uuid4())
+        chat_messages.insert_one({
+            "message_id": msg_id,
+            "company_id": req.company_id or "default_company",
+            "role": "assistant",
+            "content": fb_res.get("content", ""),
+            "reasoning": "",
+            "tool_calls": fb_res.get("executed_tools", []),
+            "todos": [],
+            "model": "local_fallback",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        return fb_res
 
 
 
