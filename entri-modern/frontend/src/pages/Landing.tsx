@@ -165,7 +165,7 @@ export default function Landing() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }} className="nav-actions">
               <Link to="/login" className="font-inter nav-login" style={{ padding: '7px 12px', color: 'rgba(11,15,30,.85)', textDecoration: 'none', fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap', transition: 'color .15s ease' }}>Log in</Link>
-              <Link to="/login" className="font-inter" style={{ padding: '7px 14px', background: '#0b0f1e', color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,.12)', transition: 'transform .15s ease, box-shadow .15s ease', lineHeight: 1, whiteSpace: 'nowrap' }}>Get started <ArrowRight style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle' }} /></Link>
+              <Link to="/login" className="font-inter" style={{ padding: '7px 14px', background: '#0b0f1e', color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', boxShadow: 'none', transition: 'transform .15s ease', lineHeight: 1, whiteSpace: 'nowrap' }}>Get started <ArrowRight style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle' }} /></Link>
               <button onClick={() => setMenuOpen(v => !v)} className="btn btn-ghost nav-toggle" style={{ padding: 6, display: 'none' }} aria-label="Menu">
                 {menuOpen ? <X style={{ width: 18, height: 18 }} /> : <Menu style={{ width: 18, height: 18 }} />}
               </button>
@@ -200,8 +200,8 @@ export default function Landing() {
                 <p className="font-inter" style={{ fontSize: 'clamp(17px, 1.8vw, 21px)', lineHeight: 1.55, color: 'rgba(11,15,30,.7)', margin: '0 0 28px', maxWidth: 640, textAlign: 'center' }}>
                   Today's top SMBs trust entri to automate accounting, understand profit and cash flow in real time, and move their business forward.
                 </p>
-                <Link to="/login" className="font-inter" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 28px', background: '#0b0f1e', color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 15, textDecoration: 'none', boxShadow: '0 4px 20px rgba(0,0,0,.2)' }}>
-                  Request a demo <ArrowRight style={{ width: 18, height: 18 }} />
+                <Link to="/login" className="font-inter liquid-glass-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', fontWeight: 600, fontSize: 15, textDecoration: 'none' }}>
+                  Get Access <ArrowRight style={{ width: 18, height: 18 }} />
                 </Link>
               </div>
             </Reveal>
