@@ -140,17 +140,17 @@
   top: 0;
   z-index: 50;
   background: transparent;
-  border-bottom: 1px solid rgba(255,255,255,.1);
+  border-bottom: none;
 }
 .landing .nav-link {
   font-family: 'Inter', 'Glacial Indifference', sans-serif;
   font-weight: 500;
   font-size: 15px;
-  color: rgba(255,255,255,.72);
+  color: rgba(11,15,30,.72);
   text-decoration: none;
   transition: color .15s ease;
 }
-.landing .nav-link:hover { color: #fff; }
+.landing .nav-link:hover { color: #0b0f1e; }
 
 /* ---------- Feature cards ---------- */
 .landing .feature-card {
